@@ -20,10 +20,10 @@ Dibandingkan langsung dengan `flammap.dll` dan `mtt.dll` FlamMap 6.2 asli, dijal
 | Rasio panjang/lebar elips, arah rambat maksimum | selisih < 1% / < 1° |
 | Waktu tiba MTT (resolusi 30 m, 4 jam) | median selisih 1%; area terbakar 30/60/120/240 menit tumpang tindih 96–98% (Sørensen) |
 | Bekas terbakar 9 Sep (dNBR) | FlamMap 0,736 / repo ini 0,729; arah pusat 250° (obs. 248°) |
+| Api tajuk Finney (1998) dan Scott/Reinhardt (2001), angin 30 mph (13.195 sel tajuk) | tipe api sama di 99,99% sel; ROS, intensitas, panjang nyala, rasio panjang/lebar median selisih < 0,1% |
 
 Yang **berbeda** dari FlamMap/FARSITE:
 - Tidak ada *spotting* (loncatan bara). Kalibrasi selama ini juga memakai spot 0.
-- Api tajuk disederhanakan (Van Wagner + Rothermel 1991). Panjang nyala sel api tajuk pasif bisa berbeda dari FlamMap. Ini tidak berpengaruh di savana.
 - Kadar air mati di mode FARSITE memakai model timelag EMC sederhana, bukan model Nelson. Untuk kalibrasi, pakai `--kadar-air-tetap`, sama seperti yang selama ini dilakukan di FlamMap.
 - Perambatan memakai Dijkstra 32 arah (seperti MTT). Mode FARSITE mengganti laju tiap jam, bukan propagasi perimeter Huygens.
 
@@ -115,7 +115,11 @@ NDVI/NBR dihitung dari DN mentah (termasuk offset +1000), sama dengan file latih
 
 ## Simulasi dari GitHub (tanpa PC)
 
-Buka tab Actions → **Simulasi api** → *Run workflow*. Isi titik api (lintang,bujur), mode, dan waktu. Hasilnya bisa diunduh sebagai artifact dan juga disimpan ke Drive `simulasi/`.
+Paling mudah lewat **halaman peta** `https://kopluck8.github.io/Simulasi-API-Tambora/simulasi.html`: klik titik api, pilih FARSITE/MTT dan metode api tajuk (Finney 1998 / Scott-Reinhardt 2001), jalankan, lalu lihat dan unduh hasilnya. Penyiapan sekali (token GitHub di Apps Script): [docs/PANDUAN_HALAMAN_SIMULASI.md](docs/PANDUAN_HALAMAN_SIMULASI.md).
+
+Bisa juga dari tab Actions → **Simulasi api** → *Run workflow*. Hasil diterbitkan sebagai GitHub Release `sim-<id>` (overlay, PNG, `hasil.zip`) dan disimpan ke Drive `simulasi/`.
+
+Di baris perintah, metode api tajuk dipilih dengan `--tajuk finney|scott|tanpa` (bawaan `finney`).
 
 ## Struktur kode
 
