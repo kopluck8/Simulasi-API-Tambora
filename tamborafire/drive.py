@@ -1,10 +1,11 @@
-"""Google Drive (REST v3) dengan OAuth refresh token milik akun Google Anda.
+"""Google Drive (REST v3).
 
-Akun Gmail pribadi tidak bisa memakai service account untuk menyimpan file (service account tidak
-punya kuota My Drive), jadi dipakai OAuth 'Desktop app' + refresh token. Rahasia diambil dari
-environment: GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN.
-Kalau Anda memakai Shared Drive (Google Workspace), service account juga bisa:
-GDRIVE_SERVICE_ACCOUNT_JSON (isi file JSON).
+Token akses diambil dengan salah satu cara (dicek berurutan):
+1. Web App Apps Script milik Anda (apps-script/Kode.gs): GDRIVE_TOKEN_URL + GDRIVE_KUNCI. Cara utama,
+   tanpa Google Cloud / verifikasi.
+2. OAuth refresh token: GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN.
+3. Service account (hanya untuk Shared Drive Google Workspace): GDRIVE_SERVICE_ACCOUNT_JSON.
+Service account tidak bisa menulis ke My Drive akun Gmail pribadi (tidak punya kuota).
 """
 from __future__ import annotations
 
@@ -30,7 +31,17 @@ class Drive:
     def token(self):
         if self._token and time.time() < self._exp - 60:
             return self._token
-        if os.environ.get("GDRIVE_REFRESH_TOKEN"):
+        if os.environ.get("GDRIVE_TOKEN_URL"):
+            r = requests.get(os.environ["GDRIVE_TOKEN_URL"], params={"kunci": os.environ.get("GDRIVE_KUNCI", "")},
+                             timeout=120, allow_redirects=True)
+            r.raise_for_status()
+            try:
+                d = r.json()
+            except ValueError:
+                raise RuntimeError("Web App Apps Script tidak mengembalikan JSON. Cek akses 'Anyone' dan URL /exec.")
+            if "access_token" not in d:
+                raise RuntimeError("Apps Script: " + str(d.get("error", d)))
+        elif os.environ.get("GDRIVE_REFRESH_TOKEN"):
             r = requests.post("https://oauth2.googleapis.com/token", data=dict(
                 client_id=os.environ["GDRIVE_CLIENT_ID"], client_secret=os.environ["GDRIVE_CLIENT_SECRET"],
                 refresh_token=os.environ["GDRIVE_REFRESH_TOKEN"], grant_type="refresh_token"), timeout=60)
@@ -39,7 +50,7 @@ class Drive:
         elif os.environ.get("GDRIVE_SERVICE_ACCOUNT_JSON"):
             d = _service_account_token(json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT_JSON"]))
         else:
-            raise RuntimeError("Rahasia Google Drive belum diisi (GDRIVE_CLIENT_ID/SECRET/REFRESH_TOKEN).")
+            raise RuntimeError("Rahasia Google Drive belum diisi (GDRIVE_TOKEN_URL + GDRIVE_KUNCI).")
         self._token, self._exp = d["access_token"], time.time() + int(d.get("expires_in", 3600))
         return self._token
 

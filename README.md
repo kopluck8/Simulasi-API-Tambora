@@ -85,18 +85,10 @@ Struktur folder di Drive (dibuat otomatis kecuali `dasar`):
   simulasi/     hasil dari workflow "Simulasi api"
 ```
 
-Panduan rinci langkah demi langkah (tanpa Python): [docs/PANDUAN_GOOGLE_DRIVE.md](docs/PANDUAN_GOOGLE_DRIVE.md). Ringkasnya:
-1. **Folder**: buat folder di Google Drive, misalnya `Simulasi API Tambora`. Salin ID-nya (bagian terakhir URL folder).
-   - Buat subfolder `dasar` dan unggah isi `geotiff_junijuli2026_10m.zip` ke sana, bisa lewat browser.
-2. **Kunci akses**:
-   - Di console.cloud.google.com, buat project, aktifkan **Google Drive API**.
-   - Buka *Credentials → Create credentials → OAuth client ID → Desktop app*. Catat Client ID dan Client secret.
-   - Di *OAuth consent screen*, tambahkan email Anda sebagai *test user*, lalu ubah status ke **In production** supaya token tidak kedaluwarsa setelah 7 hari.
-3. **Refresh token**: di PC jalankan
-   `tambora drive-auth --client-id <ID> --client-secret <SECRET>`, lalu izinkan di browser. Refresh token akan tercetak.
-4. **Secrets GitHub** (repo → Settings → Secrets and variables → Actions): `GDRIVE_FOLDER_ID`, `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`, `GDRIVE_REFRESH_TOKEN`.
-
-Kenapa bukan service account: service account tidak punya kuota penyimpanan di Drive akun Gmail pribadi, jadi tidak bisa menulis file. Service account (`GDRIVE_SERVICE_ACCOUNT_JSON`) hanya berfungsi untuk Shared Drive Google Workspace.
+Panduan rinci langkah demi langkah: [docs/PANDUAN_GOOGLE_DRIVE.md](docs/PANDUAN_GOOGLE_DRIVE.md). Ringkasnya:
+1. Buat folder di Drive dan unggah 9 GeoTIFF dasar ke subfolder `dasar`.
+2. Pasang Web App Apps Script penghubung (`apps-script/Kode.gs`). Tidak perlu Google Cloud atau verifikasi.
+3. Isi secrets GitHub: `GDRIVE_FOLDER_ID`, `GDRIVE_TOKEN_URL`, `GDRIVE_KUNCI`.
 
 ## Update landscape mingguan
 
