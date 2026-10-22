@@ -286,9 +286,20 @@ def cmd_update(args, cfg):
         per.append(dict(jendela=f"{w0}/{w1}", citra=len(used), baru_ha=info["bekas_terbakar_baru_ha"],
                         koreksi=info["koreksi_musiman_dnbr"]))
         msg = f"   bekas terbakar baru {info['bekas_terbakar_baru_ha']} ha, koreksi musiman {info['koreksi_musiman_dnbr']}"
+        msg += (f"; kandidat baru {info['kandidat_baru_ha']} ha, gugur {info['kandidat_gugur_ha']} ha, "
+                f"menunggu {info['kandidat_menunggu_ha']} ha; per kelompok {info['baru_per_kelompok_ha']}; "
+                f"elevasi p10/50/90 {info.get('baru_elevasi_persentil_m')}")
+        per[-1].update(kandidat_baru_ha=info["kandidat_baru_ha"], kandidat_gugur_ha=info["kandidat_gugur_ha"])
         if ref_mask is not None and ref_mask.any():
-            hit = scar.astype(bool) & ref_mask
-            msg += f"; bekas 9 Sep tertandai {100 * hit.sum() / ref_mask.sum():.0f}%"
+            hit = (scar == 1) & ref_mask
+            cand = (scar == 2) & ref_mask
+            v = dnbr[ref_mask & np.isfinite(dnbr)]
+            q = [round(float(x), 3) for x in np.percentile(v, [10, 50, 90])] if v.size else None
+            o = dnbr[~ref_mask & np.isfinite(dnbr)]
+            qo = [round(float(x), 3) for x in np.percentile(o, [50, 99, 99.9])] if o.size else None
+            msg += (f"; bekas 9 Sep: terkonfirmasi {100 * hit.sum() / ref_mask.sum():.0f}%, kandidat "
+                    f"{100 * cand.sum() / ref_mask.sum():.0f}%, dNBR terkoreksi di dalam p10/50/90 {q}, "
+                    f"di luar p50/99/99.9 {qo}")
             per[-1]["validasi_9sep_persen"] = round(100 * float(hit.sum() / ref_mask.sum()), 1)
         print(msg)
     if scar is None:

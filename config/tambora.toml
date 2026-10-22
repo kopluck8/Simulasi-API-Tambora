@@ -44,6 +44,9 @@ mode_kelas = "dasar"          # "dasar": K1-K4 tetap dari awal kemarau, hanya be
 batas_ndvi = [0.317, 0.593, 0.781]
 proporsi = [0.033, 0.430, 0.418, 0.118]
 dnbr_ambang = 0.10            # bekas terbakar baru bila dNBR (median jendela, terkoreksi musiman) > ambang
+perlu_konfirmasi = true       # kandidat baru dihitung bekas terbakar bila jendela berikutnya masih gelap
+konfirmasi_faktor = 0.7       # ... yaitu dNBR terkoreksi > 0,7 x dnbr_ambang dibanding NBR pra-kebakaran
+                              # bekas_terbakar_musim.tif: 1 = bekas terbakar, 2 = kandidat (belum fuel 99)
 pengamatan_min = 2            # minimal pengamatan cerah per piksel dalam jendela
 validasi_bekas = "contoh/piong_9sep/bekas_terbakar_9sep2026_dNBR.shp"  # cek di log: berapa % bekas 9 Sep tertandai
 ndvi_rumput_min = 0.0         # piksel batu/pasir dengan NDVI dasar >= 0,2 sudah dihitung rumput di peta dasar

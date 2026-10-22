@@ -109,8 +109,17 @@ def test_update_mingguan_tandai_bekas_terbakar():
     b4 = np.full((n, n), 1500.0, np.float32)
     nbr_now = np.full((n, n), 0.18, np.float32)        # pengeringan musiman: dNBR 0,12 di mana-mana
     nbr_now[20:30, 20:30] = -0.05                      # kebakaran: dNBR 0,35 (9 ha)
+    nbr_now[35:45, 35:45] = 0.0                        # derau satu jendela (mis. bayangan awan)
     b12 = b8 * (1 - nbr_now) / (1 + nbr_now)
-    f2, scar, ndvi, dnbr, ref, info = L.update(lay, nbr0, dict(b04=b4, b08=b8, b12=b12), cfg)
-    assert (f2[20:30, 20:30] == 99).all() and f2[0, 10] == 31
+    f1, st1, ndvi, dnbr, ref, info = L.update(lay, nbr0, dict(b04=b4, b08=b8, b12=b12), cfg)
+    assert (st1[20:30, 20:30] == 2).all() and (f1[20:30, 20:30] == 31).all()   # baru kandidat
+    assert info["kandidat_baru_ha"] == pytest.approx(18.0)
+    assert ref[25, 25] == pytest.approx(0.18, abs=1e-4)   # acuan pra-kebakaran ditahan, dikoreksi musiman
+    nbr2 = np.full((n, n), 0.17, np.float32)
+    nbr2[20:30, 20:30] = -0.02                         # bekas arang bertahan
+    b12 = b8 * (1 - nbr2) / (1 + nbr2)
+    f2, scar, ndvi, dnbr, ref2, info = L.update(lay, ref, dict(b04=b4, b08=b8, b12=b12), cfg, st1)
+    assert (f2[20:30, 20:30] == 99).all() and (f2[35:45, 35:45] == 31).all() and f2[0, 10] == 31
     assert info["bekas_terbakar_baru_ha"] == pytest.approx(9.0)
+    assert info["kandidat_gugur_ha"] == pytest.approx(9.0)
     assert ref[0, 10] == pytest.approx(0.18, abs=1e-4)   # acuan bergulir diperbarui

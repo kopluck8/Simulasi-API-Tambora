@@ -89,7 +89,7 @@ def remove_small(mask, res, min_ha):
     return keep[lab]
 
 
-METODE = "dnbr-median-bergulir-v3"
+METODE = "dnbr-median-bergulir-v4"
 
 
 def _groups(fuel0):
@@ -106,10 +106,12 @@ def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
     median Juni-Juli. Dengan begitu yang terdeteksi hanya perubahan dalam ~3 minggu terakhir.
     Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok fuel
     (dNBR offset, Parks dkk. 2014), lalu ambang dNBR_terkoreksi > dnbr_ambang.
+    Piksel yang lolos menjadi KANDIDAT (2) dulu; baru menjadi bekas terbakar (1, fuel 99) bila jendela
+    berikutnya masih gelap dibanding NBR pra-kebakarannya. Ini membuang derau satu-jendela.
 
     composite: dict ndvi, nbr (median jendela, DN mentah), n (jumlah pengamatan cerah),
     atau dict b04,b08,b12 (satu pengamatan; dipakai di tes).
-    Mengembalikan (fuel, bekas_terbakar_musim, ndvi, dnbr_terkoreksi, nbr_ref_baru, ringkasan)."""
+    Mengembalikan (fuel, status 0/1/2, ndvi, dnbr_terkoreksi, nbr_ref_baru, ringkasan)."""
     k = cfg["mingguan"]
     mode = mode or k["mode_kelas"]
     fuel0 = base_layers["fuel"].astype(np.int16)
@@ -128,36 +130,64 @@ def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
     dnbr = (nbr_ref - nbr).astype(np.float32)
     adj = np.full(dnbr.shape, np.nan, np.float32)
     offsets = {}
+    offmap = np.zeros(dnbr.shape, np.float32)
     for name, g in _groups(fuel0):
         m = g & seen
         if m.sum() < 1000:
             continue
         off = float(np.median(dnbr[m]))
         offsets[name] = round(off, 4)
+        offmap[g] = off
         adj[m] = dnbr[m] - off
     burnable = np.isfinite(adj)
-    new_scar = burnable & (adj > k["dnbr_ambang"])
+    amb = float(k["dnbr_ambang"])
     res = float(cfg["aoi"]["res"])
-    new_scar = remove_small(new_scar, res, k.get("luas_min_ha", 1.0))
-    if scar_prev is not None:
-        new_scar &= ~scar_prev.astype(bool)
-    scar = new_scar if scar_prev is None else (scar_prev.astype(bool) | new_scar)
-    ref_new = np.where(np.isfinite(nbr), nbr, nbr_ref).astype(np.float32)
+    # status per piksel: 0 belum, 1 bekas terbakar terkonfirmasi, 2 kandidat (menunggu jendela berikutnya)
+    prev = np.zeros(fuel0.shape, np.uint8) if scar_prev is None else scar_prev.astype(np.uint8)
+    conf_prev, cand_prev = prev == 1, prev == 2
+    # kandidat lama: NBR acuannya ditahan pada nilai pra-kebakaran, jadi dNBR sekarang = perubahan sejak sebelum api.
+    # Terkonfirmasi bila masih gelap (bekas arang bertahan selama kemarau), gugur bila sudah pulih.
+    keep = float(k.get("konfirmasi_faktor", 0.7)) * amb
+    confirm = cand_prev & burnable & (adj > keep) & (dnbr > keep)
+    confirm = remove_small(confirm, res, k.get("luas_min_ha", 1.0))
+    drop = cand_prev & burnable & ~confirm
+    still = cand_prev & ~burnable
+    # kandidat baru: penurunan NBR terkoreksi DAN mentah melewati ambang
+    new_c = burnable & (adj > amb) & (dnbr > amb) & ~conf_prev & ~cand_prev
+    new_c = remove_small(new_c, res, k.get("luas_min_ha", 1.0))
+    if not k.get("perlu_konfirmasi", True):
+        confirm, new_c = confirm | new_c, np.zeros_like(new_c)
+    status = np.zeros(fuel0.shape, np.uint8)
+    status[conf_prev | confirm] = 1
+    status[(still | new_c) & (status == 0)] = 2
+    scar = status == 1
+    # NBR acuan bergulir; untuk kandidat tahan nilai pra-kebakaran, digeser dengan perubahan musiman
+    # kelompoknya, supaya jendela berikutnya membandingkan dengan "seandainya tidak terbakar"
+    ref_new = np.where(status == 2, nbr_ref - offmap, np.where(np.isfinite(nbr), nbr, nbr_ref)).astype(np.float32)
     fuel = fuel0.copy()
+    ha = res * res / 1e4
     info = dict(mode=mode, metode=METODE,
                 piksel_cerah_persen=round(100 * float(seen[grass].mean()) if grass.any() else 0, 1),
-                koreksi_musiman_dnbr=offsets)
+                koreksi_musiman_dnbr=offsets,
+                kandidat_baru_ha=round(float(new_c.sum() * ha), 1),
+                kandidat_gugur_ha=round(float(drop.sum() * ha), 1),
+                kandidat_menunggu_ha=round(float((status == 2).sum() * ha), 1))
     if mode in ("batas", "kuantil"):
         cls, b = classify(ndvi, grass & np.isfinite(ndvi), mode, cfg)
         upd = grass & np.isfinite(ndvi)
         fuel[upd] = cls[upd]
         info["batas_ndvi"] = b
     fuel[scar] = int(k["kode_terbakar"])
-    ha = res * res / 1e4
-    info["bekas_terbakar_baru_ha"] = round(float(new_scar.sum() * ha), 1)
+    newly = scar & ~conf_prev
+    info["bekas_terbakar_baru_ha"] = round(float(newly.sum() * ha), 1)
     info["bekas_terbakar_musim_ha"] = round(float(scar.sum() * ha), 1)
+    info["baru_per_kelompok_ha"] = {n: round(float((newly & g).sum() * ha), 1) for n, g in _groups(fuel0)}
+    elev = base_layers.get("elev")
+    if elev is not None and newly.any():
+        e = elev[newly]
+        info["baru_elevasi_persentil_m"] = [int(v) for v in np.percentile(e, [10, 50, 90])]
     info["luas_fuel_ha"] = {str(int(v)): round(float(c * ha), 1) for v, c in zip(*np.unique(fuel, return_counts=True))}
-    return fuel, scar.astype(np.uint8), ndvi.astype(np.float32), adj, ref_new, info
+    return fuel, status, ndvi.astype(np.float32), adj, ref_new, info
 
 
 def windows(start: dt.date, end: dt.date, days: int):
