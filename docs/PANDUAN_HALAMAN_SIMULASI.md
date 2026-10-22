@@ -37,7 +37,7 @@ Jangan membuat *New deployment*, karena itu menghasilkan URL baru. Kalau terlanj
 Buka `https://kopluck8.github.io/Simulasi-API-Tambora/simulasi.html`.
 
 1. Klik peta untuk menaruh titik api. Kotak oranye adalah Analysis Area.
-2. Pilih **FARSITE** (cuaca per jam dari ERA5/ECMWF di titik api) atau **MTT** (angin tetap, wajib isi kecepatan dan arah).
+2. Pilih **FARSITE** atau **MTT** (angin tetap, wajib isi kecepatan dan arah). FARSITE memakai cuaca per jam dari ERA5/ECMWF di titik api, atau dari file **.wxs** yang Anda unggah (misalnya dari pembuat WXS). Unggahan .wxs disimpan sementara di folder `simulasi_wxs` di Google Drive Anda. Waktu mulai dan lama harus berada di dalam rentang tanggal file .wxs.
 3. Pilih **Crown Fire Calculation Method**: Finney (1998) atau Scott/Reinhardt (2001), sama dengan pilihan di FlamMap.
 4. Klik **Jalankan simulasi**. Status berjalan tampil di bawah tombol, biasanya selesai dalam 5 sampai 20 menit.
 5. Setelah selesai, peta waktu tiba muncul di atas peta. Tombol **Unduh semua** berisi GeoTIFF (waktu tiba, ROS, panjang nyala, intensitas, tipe api), shapefile perimeter per jam, dan PNG.

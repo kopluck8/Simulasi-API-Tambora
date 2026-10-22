@@ -51,7 +51,9 @@ a{color:var(--accent)}
           <select id="mode"><option value="farsite">FARSITE (cuaca per jam)</option><option value="mtt">MTT (angin tetap)</option></select></div>
         <div><label>Lama (jam)</label><input id="lama" type="number" min="1" max="72" step="1" value="24"></div>
       </div>
-      <div id="blokMulai"><label>Waktu mulai (WITA)</label><input id="mulai" type="datetime-local" value="2026-09-09T13:00"></div>
+      <div id="blokMulai"><label>Waktu mulai (WITA)</label><input id="mulai" type="datetime-local" value="2026-09-09T13:00">
+        <label>Cuaca .wxs (opsional)</label><input id="wxs" type="file" accept=".wxs,.txt">
+        <p class="hint" id="infoWxs">Kosong = cuaca per jam ERA5/ECMWF di titik api. Dengan .wxs (mis. dari pembuat WXS), cuaca diambil dari file ini.</p></div>
       <div class="row">
         <div><label>Angin 20-ft (km/j)</label><input id="kec" type="number" min="0" max="150" step="1" placeholder="dari cuaca"></div>
         <div><label>Arah asal (°)</label><input id="arah" type="number" min="0" max="360" step="1" placeholder="dari cuaca"></div>
@@ -122,6 +124,22 @@ function aturMode(){
 }
 $('mode').addEventListener('change', aturMode); aturMode();
 
+var teksWxs = '', rentangWxs = null;
+$('wxs').addEventListener('change', function(){
+  var f = this.files[0]; teksWxs = ''; rentangWxs = null;
+  if (!f) { $('infoWxs').textContent = 'Kosong = cuaca per jam ERA5/ECMWF di titik api.'; return; }
+  f.text().then(function(t){
+    var baris = t.split(/\r?\n/).filter(function(l){ return /^\s*\d{4}\s+\d{1,2}\s+\d{1,2}\s+\d{1,4}\s/.test(l); });
+    if (!/RAWS/i.test(t.slice(0, 400)) || !baris.length) { $('infoWxs').textContent = 'File ini bukan .wxs yang dikenali.'; $('infoWxs').className = 'hint err'; return; }
+    function waktu(l){ var a = l.trim().split(/\s+/), j = ('0000' + a[3]).slice(-4);
+      return new Date(+a[0], +a[1] - 1, +a[2], +j.slice(0, 2), +j.slice(2)); }
+    rentangWxs = [waktu(baris[0]), waktu(baris[baris.length - 1])]; teksWxs = t;
+    var fmt = function(d){ return d.toLocaleString('id-ID', {dateStyle: 'medium', timeStyle: 'short'}); };
+    $('infoWxs').className = 'hint ok';
+    $('infoWxs').textContent = f.name + ': ' + baris.length + ' jam, ' + fmt(rentangWxs[0]) + ' s.d. ' + fmt(rentangWxs[1]) + '. Waktu mulai dan lama harus di dalam rentang ini.';
+  });
+});
+
 function status(t, kelas){ var s = $('status'); s.textContent = t; s.className = kelas || ''; }
 
 $('jalan').addEventListener('click', function(){
@@ -131,10 +149,15 @@ $('jalan').addEventListener('click', function(){
   var mode = $('mode').value, kec = $('kec').value, arah = $('arah').value;
   if (mode === 'mtt' && (kec === '' || arah === '')) return status('MTT perlu kecepatan dan arah angin.', 'err');
   if ((kec === '') !== (arah === '')) return status('Isi kecepatan dan arah angin sekaligus, atau kosongkan keduanya.', 'err');
+  if (mode === 'farsite' && rentangWxs) {
+    var m0 = new Date($('mulai').value), m1 = new Date(m0.getTime() + parseFloat($('lama').value) * 3600000);
+    if (m0 < rentangWxs[0] || m1 > rentangWxs[1]) return status('Waktu mulai + lama berada di luar rentang .wxs.', 'err');
+  }
   var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var q = {mode: mode, titik: $('titik').value, mulai: $('mulai').value.replace('T', ' '), lama_jam: $('lama').value,
            angin: kec === '' ? '' : kec + ',' + arah, tajuk: $('tajuk').value, radius_km: $('radius').value,
            res: $('res').value, landscape: $('ls').value, id: id};
+  if (mode === 'farsite' && teksWxs) q.wxs = teksWxs;
   $('jalan').disabled = true;
   status('Mengirim permintaan…');
   fetch(C.webapp, {method: 'POST', body: JSON.stringify(q)}).then(function(r){ return r.json(); }).then(function(d){
@@ -188,7 +211,7 @@ function tampil(rel){
     '<tr><td>Mode</td><td>' + (m.mode || d.mode || '').toUpperCase() + '</td></tr>' +
     (m.mulai && (m.mode || d.mode) === 'farsite' ? '<tr><td>Mulai</td><td>' + m.mulai + ' WITA</td></tr>' : '') +
     '<tr><td>Lama</td><td>' + angka(m.lama) + ' jam</td></tr>' +
-    '<tr><td>Angin</td><td>' + (m.angin ? m.angin.replace(',', ' km/j dari ') + '°' : 'cuaca per jam') + '</td></tr>' +
+    '<tr><td>Angin</td><td>' + (m.angin ? m.angin.replace(',', ' km/j dari ') + '°' : (d.wxs ? 'dari .wxs unggahan' : 'cuaca per jam ERA5')) + '</td></tr>' +
     '<tr><td>Metode tajuk</td><td>' + (nama[d.metode_tajuk] || d.metode_tajuk) + '</td></tr>' +
     '<tr><td>Luas terbakar</td><td><b>' + angka(d.luas_terbakar_ha) + ' ha</b></td></tr>' +
     '<tr><td>· api permukaan</td><td>' + angka(t.permukaan) + ' ha</td></tr>' +

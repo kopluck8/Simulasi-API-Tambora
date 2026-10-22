@@ -182,6 +182,9 @@ def cmd_farsite(args, cfg):
     end = start + dt.timedelta(hours=args.jam)
     if args.wxs:
         wx = WX.read_wxs(args.wxs)
+        os.makedirs(args.out, exist_ok=True)
+        import shutil
+        shutil.copy(args.wxs, os.path.join(args.out, "cuaca_" + os.path.basename(args.wxs)))
     else:
         lon, lat = Transformer.from_crs(cfg["aoi"]["epsg"], 4326, always_xy=True).transform(x0, y0)
         wx = WX.fetch(round(lat, 4), round(lon, 4), start.date(), end.date(), cfg["simulasi"]["zona"],

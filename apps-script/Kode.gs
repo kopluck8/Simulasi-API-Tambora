@@ -48,6 +48,7 @@ function doPost(e) {
   try {
     var q = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var inputs = periksa_(q);
+    if (q.wxs) simpanWxs_(String(q.wxs), inputs.id);
     var cache = CacheService.getScriptCache();
     if (cache.get('terakhir')) throw new Error('Tunggu 1 menit sebelum menjalankan simulasi berikutnya.');
     var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
@@ -95,6 +96,15 @@ function periksa_(q) {
   return { mode: mode, titik: lat.toFixed(5) + ',' + lon.toFixed(5), mulai: mulai || '2026-09-09 13:00',
            lama_jam: String(lama), angin: angin, tajuk: tajuk, radius_km: String(radius), res: res,
            landscape: ls, id: id };
+}
+
+/** Simpan .wxs dari halaman peta ke folder Drive "simulasi_wxs" sebagai <id>.wxs; workflow mengambilnya. */
+function simpanWxs_(teks, id) {
+  if (teks.length > 400000) throw new Error('file .wxs terlalu besar (maks 400 KB)');
+  if (!/RAWS|ENGLISH|METRIC/i.test(teks.slice(0, 400))) throw new Error('isi file bukan .wxs (tidak ada baris RAWS/METRIC)');
+  var it = DriveApp.getRootFolder().getFoldersByName('simulasi_wxs');
+  var f = it.hasNext() ? it.next() : DriveApp.getRootFolder().createFolder('simulasi_wxs');
+  f.createFile(id + '.wxs', teks, 'text/plain');
 }
 
 function json_(o) {

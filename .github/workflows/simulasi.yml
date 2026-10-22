@@ -77,6 +77,23 @@ jobs:
           else
             echo "lcp=contoh/piong_9sep/landscape_prakebakaran_9sep_30m.lcp" >> "$GITHUB_OUTPUT"
           fi
+      - name: Ambil .wxs dari halaman peta (jika diunggah)
+        if: inputs.mode == 'farsite' && inputs.id != '' && env.GDRIVE_TOKEN_URL != ''
+        run: |
+          python - <<'PY'
+          import os
+          from tamborafire.drive import Drive
+          d = Drive()
+          fol = d.find("simulasi_wxs", "root", folder=True)
+          f = d.find(os.environ["ID"] + ".wxs", fol["id"]) if fol else None
+          if f:
+              os.makedirs("kerja", exist_ok=True)
+              d.download(f["id"], "kerja/unggahan.wxs")
+              open(os.environ["GITHUB_ENV"], "a").write("WXS=kerja/unggahan.wxs\n")
+              print("pakai .wxs unggahan:", f["name"])
+          else:
+              print("tidak ada .wxs unggahan; cuaca diambil dari ERA5/ECMWF")
+          PY
       - name: Jalankan
         env:
           TITIK: ${{ inputs.titik }}
@@ -98,6 +115,7 @@ jobs:
           else
             EXTRA=""
             [ -n "$KEC" ] && EXTRA="--kecepatan $KEC --arah $ARAH"
+            [ -n "$WXS" ] && EXTRA="$EXTRA --wxs $WXS"
             python -m tamborafire farsite $ARGS --mulai "$MULAI" --jam "$LAMA" $EXTRA
           fi
       - uses: actions/upload-artifact@v4
@@ -123,6 +141,7 @@ jobs:
           out = e["OUT"]
           d = json.load(open(os.path.join(out, "web.json")))
           d["run"] = e["RUN_URL"]
+          d["wxs"] = bool(e.get("WXS"))
           d["masukan"] = {k: e["IN_" + k.upper()] for k in ("mode", "titik", "mulai", "lama", "angin", "tajuk", "ls", "res")}
           open(os.path.join(out, "catatan.md"), "w").write("```json\n" + json.dumps(d, default=str) + "\n```\n")
           PY
