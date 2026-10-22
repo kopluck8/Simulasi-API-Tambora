@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulasi API Tambora · Peta</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f6f6f3;--fg:#1c1c1a;--muted:#686862;--card:#fff;--line:#dcdbd5;--accent:#1f6f5c;--warn:#a5481b;--ok:#2e7d32}
+@media (prefers-color-scheme: dark){:root{--bg:#151514;--fg:#ebebe8;--muted:#a2a29b;--card:#1e1e1c;--line:#34342f;--accent:#5fbfa3;--warn:#e08a5f;--ok:#7fc58a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 16px 6px;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 8px}
+.sub{color:var(--muted);margin:2px 0 0;font-size:14px}
+.wrap{display:grid;grid-template-columns:360px 1fr;gap:14px;max-width:1280px;margin:0 auto;padding:10px 16px 40px}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}#peta{height:62vh}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+#peta{height:calc(100vh - 110px);min-height:480px;border-radius:10px;border:1px solid var(--line)}
+label{display:block;font-size:13px;color:var(--muted);margin:8px 0 3px}
+input,select,button{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{background:var(--accent);color:#fff;border:0;font-weight:600;margin-top:12px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+.hint{font-size:12.5px;color:var(--muted);margin:4px 0 0}
+#status{font-size:14px;margin-top:10px;white-space:pre-line}
+.err{color:var(--warn)}.ok{color:var(--ok)}
+.hasil a{display:inline-block;margin:4px 10px 0 0}
+table{border-collapse:collapse;font-size:13.5px;width:100%;font-variant-numeric:tabular-nums}
+td{padding:3px 4px;border-bottom:1px solid var(--line)}td:last-child{text-align:right}
+.riwayat div{padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
+.riwayat div:hover{color:var(--accent)}
+.legend{background:var(--card);color:var(--fg);padding:6px 8px;border-radius:6px;font-size:12px;line-height:1.3}
+.bar{height:10px;width:160px;background:linear-gradient(90deg,#fcffa4,#f98e09,#bc3754,#57106e,#000004);border-radius:2px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulasi api Tambora</h1>
+  <p class="sub">Klik peta untuk menaruh titik api, isi pengaturan, lalu Jalankan. Mesin sama dengan FlamMap MTT / FARSITE (dicek terhadap flammap.dll). <a href="index.html">Halaman utama</a></p>
+</header>
+<div class="wrap">
+  <div>
+    <section class="card">
+      <h2>Pengaturan</h2>
+      <label>Titik api (lintang, bujur)</label>
+      <input id="titik" placeholder="klik peta, atau ketik -8.2585,118.1506">
+      <div class="row">
+        <div><label>Mode</label>
+          <select id="mode"><option value="farsite">FARSITE (cuaca per jam)</option><option value="mtt">MTT (angin tetap)</option></select></div>
+        <div><label>Lama (jam)</label><input id="lama" type="number" min="1" max="72" step="1" value="24"></div>
+      </div>
+      <div id="blokMulai"><label>Waktu mulai (WITA)</label><input id="mulai" type="datetime-local" value="2026-09-09T13:00"></div>
+      <div class="row">
+        <div><label>Angin 20-ft (km/j)</label><input id="kec" type="number" min="0" max="150" step="1" placeholder="dari cuaca"></div>
+        <div><label>Arah asal (°)</label><input id="arah" type="number" min="0" max="360" step="1" placeholder="dari cuaca"></div>
+      </div>
+      <p class="hint" id="hintAngin">FARSITE: kosongkan angin agar memakai cuaca per jam (ERA5/ECMWF) di titik api. MTT: angin wajib diisi.</p>
+      <label>Crown Fire Calculation Method</label>
+      <select id="tajuk"><option value="finney">Finney (1998)</option><option value="scott">Scott/Reinhardt (2001)</option><option value="tanpa">Tanpa api tajuk</option></select>
+      <div class="row">
+        <div><label>Analysis Area (km)</label><input id="radius" type="number" min="1" max="20" step="1" value="8"></div>
+        <div><label>Resolusi</label><select id="res"><option value="10">10 m (detail)</option><option value="30">30 m (cepat)</option></select></div>
+      </div>
+      <label>Landscape</label>
+      <select id="ls"><option value="drive">Terbaru (update mingguan, Google Drive)</option><option value="contoh">Contoh Piong 30 m</option></select>
+      <button id="jalan">Jalankan simulasi</button>
+      <div id="status"></div>
+    </section>
+    <section class="card hasil" id="kotakHasil" hidden>
+      <h2>Hasil</h2>
+      <div id="ringkas"></div>
+      <div id="unduh"></div>
+    </section>
+    <section class="card">
+      <h2>Riwayat simulasi</h2>
+      <div class="riwayat" id="riwayat">Memuat…</div>
+    </section>
+  </div>
+  <div id="peta"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="simulasi_config.js"></script>
+<script>
+(function(){
+var C = window.SIM_CONFIG || {};
+var REPO = C.repo || 'kopluck8/Simulasi-API-Tambora';
+var API = 'https://api.github.com/repos/' + REPO;
+var $ = function(id){ return document.getElementById(id); };
+
+var peta = L.map('peta').setView([-8.25, 117.99], 11);
+var citra = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom: 18, attribution: 'Citra © Esri'}).addTo(peta);
+var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {maxZoom: 17, attribution: '© OpenTopoMap, © OpenStreetMap'});
+L.control.layers({'Citra satelit': citra, 'Topografi': topo}).addTo(peta);
+L.rectangle([[-8.4307, 117.7631], [-8.0860, 118.1980]], {color: '#5fbfa3', weight: 1, fill: false, dashArray: '4 4'}).addTo(peta);
+
+var penanda = null, kotakAA = null, lapisan = null;
+function taruh(lat, lon){
+  $('titik').value = lat.toFixed(5) + ',' + lon.toFixed(5);
+  if (penanda) penanda.setLatLng([lat, lon]); else penanda = L.marker([lat, lon]).addTo(peta);
+  gambarAA();
+}
+function gambarAA(){
+  var t = baca(); if (!t) return;
+  var r = parseFloat($('radius').value || 8), dLat = r / 110.6, dLon = r / (111.3 * Math.cos(t[0] * Math.PI / 180));
+  var b = [[t[0] - dLat, t[1] - dLon], [t[0] + dLat, t[1] + dLon]];
+  if (kotakAA) kotakAA.setBounds(b); else kotakAA = L.rectangle(b, {color: '#f98e09', weight: 1, fill: false}).addTo(peta);
+}
+function baca(){
+  var p = $('titik').value.split(','); var a = parseFloat(p[0]), b = parseFloat(p[1]);
+  return (isFinite(a) && isFinite(b)) ? [a, b] : null;
+}
+peta.on('click', function(e){ taruh(e.latlng.lat, e.latlng.lng); });
+$('titik').addEventListener('change', function(){ var t = baca(); if (t) { taruh(t[0], t[1]); peta.panTo(t); } });
+$('radius').addEventListener('input', gambarAA);
+function aturMode(){
+  var mtt = $('mode').value === 'mtt';
+  $('blokMulai').hidden = mtt;
+  $('kec').placeholder = mtt ? 'wajib' : 'dari cuaca'; $('arah').placeholder = mtt ? 'wajib' : 'dari cuaca';
+}
+$('mode').addEventListener('change', aturMode); aturMode();
+
+function status(t, kelas){ var s = $('status'); s.textContent = t; s.className = kelas || ''; }
+
+$('jalan').addEventListener('click', function(){
+  var t = baca();
+  if (!t) return status('Klik peta dulu untuk menaruh titik api.', 'err');
+  if (!C.webapp) return status('URL Apps Script belum diisi di docs/simulasi_config.js.', 'err');
+  var mode = $('mode').value, kec = $('kec').value, arah = $('arah').value;
+  if (mode === 'mtt' && (kec === '' || arah === '')) return status('MTT perlu kecepatan dan arah angin.', 'err');
+  if ((kec === '') !== (arah === '')) return status('Isi kecepatan dan arah angin sekaligus, atau kosongkan keduanya.', 'err');
+  var id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  var q = {mode: mode, titik: $('titik').value, mulai: $('mulai').value.replace('T', ' '), lama_jam: $('lama').value,
+           angin: kec === '' ? '' : kec + ',' + arah, tajuk: $('tajuk').value, radius_km: $('radius').value,
+           res: $('res').value, landscape: $('ls').value, id: id};
+  $('jalan').disabled = true;
+  status('Mengirim permintaan…');
+  fetch(C.webapp, {method: 'POST', body: JSON.stringify(q)}).then(function(r){ return r.json(); }).then(function(d){
+    if (!d.ok) throw new Error(d.error || 'ditolak');
+    status('Permintaan diterima. Menunggu GitHub Actions memulai…');
+    pantau(id, Date.now());
+  }).catch(function(e){ status('Gagal: ' + e.message, 'err'); $('jalan').disabled = false; });
+});
+
+function pantau(id, t0){
+  var runUrl = null;
+  function langkah(){
+    var menit = Math.round((Date.now() - t0) / 60000);
+    fetch(API + '/releases/tags/sim-' + id, {cache: 'no-store'}).then(function(r){
+      if (r.ok) return r.json().then(function(rel){ tampil(rel); status('Selesai.', 'ok'); $('jalan').disabled = false; muatRiwayat(); });
+      return fetch(API + '/actions/workflows/simulasi.yml/runs?per_page=10', {cache: 'no-store'}).then(function(r2){ return r2.json(); })
+        .then(function(d){
+          var run = (d.workflow_runs || []).filter(function(x){ return (x.display_title || '').indexOf('[' + id + ']') >= 0; })[0];
+          if (run) {
+            runUrl = run.html_url;
+            if (run.status === 'completed' && run.conclusion !== 'success') {
+              status('Simulasi gagal (' + run.conclusion + '). Lihat log: ' + runUrl, 'err'); $('jalan').disabled = false; return;
+            }
+            status((run.status === 'queued' ? 'Antre' : 'Berjalan') + ' di GitHub Actions, ' + menit + ' menit. Biasanya 5-20 menit.\nLog: ' + runUrl);
+          } else status('Menunggu GitHub Actions memulai… (' + menit + ' menit)');
+          setTimeout(langkah, 30000);
+        });
+    }).catch(function(){ setTimeout(langkah, 45000); });
+  }
+  langkah();
+}
+
+function aset(rel, nama){ var a = (rel.assets || []).filter(function(x){ return x.name === nama; })[0]; return a && a.browser_download_url; }
+function dataDari(rel){
+  var m = /```json\s*([\s\S]*?)```/.exec(rel.body || ''); if (!m) return null;
+  try { return JSON.parse(m[1]); } catch (e) { return null; }
+}
+function angka(x){ return (x === undefined || x === null) ? '-' : Number(x).toLocaleString('id-ID'); }
+var legenda = null;
+function tampil(rel){
+  var d = dataDari(rel); if (!d) return;
+  if (lapisan) peta.removeLayer(lapisan);
+  var png = aset(rel, 'overlay.png');
+  if (png && d.batas) { lapisan = L.imageOverlay(png, d.batas, {opacity: 0.85}).addTo(peta); peta.fitBounds(d.batas); }
+  if (d.titik_latlon) taruh(d.titik_latlon[0], d.titik_latlon[1]);
+  if (!legenda) { legenda = L.control({position: 'bottomright'}); legenda.onAdd = function(){ var e = L.DomUtil.create('div', 'legend'); e.id = 'leg'; return e; }; legenda.addTo(peta); }
+  $('leg').innerHTML = 'Waktu tiba api (jam)<div class="bar"></div><span>0</span><span style="float:right">' + angka(d.jam_maks) + '</span>';
+  var m = d.masukan || {}, t = d.luas_per_tipe_api_ha || {};
+  var nama = {finney: 'Finney (1998)', scott: 'Scott/Reinhardt (2001)', tanpa: 'tanpa'};
+  $('ringkas').innerHTML = '<table>' +
+    '<tr><td>Mode</td><td>' + (m.mode || d.mode || '').toUpperCase() + '</td></tr>' +
+    (m.mulai && (m.mode || d.mode) === 'farsite' ? '<tr><td>Mulai</td><td>' + m.mulai + ' WITA</td></tr>' : '') +
+    '<tr><td>Lama</td><td>' + angka(m.lama) + ' jam</td></tr>' +
+    '<tr><td>Angin</td><td>' + (m.angin ? m.angin.replace(',', ' km/j dari ') + '°' : 'cuaca per jam') + '</td></tr>' +
+    '<tr><td>Metode tajuk</td><td>' + (nama[d.metode_tajuk] || d.metode_tajuk) + '</td></tr>' +
+    '<tr><td>Luas terbakar</td><td><b>' + angka(d.luas_terbakar_ha) + ' ha</b></td></tr>' +
+    '<tr><td>· api permukaan</td><td>' + angka(t.permukaan) + ' ha</td></tr>' +
+    '<tr><td>· tajuk pasif</td><td>' + angka(t.tajuk_pasif) + ' ha</td></tr>' +
+    '<tr><td>· tajuk aktif</td><td>' + angka(t.tajuk_aktif) + ' ha</td></tr>' +
+    '<tr><td>Sel</td><td>' + angka(d.sel_m) + ' m</td></tr></table>';
+  $('unduh').innerHTML = '<a href="' + aset(rel, 'hasil.zip') + '">Unduh semua (GeoTIFF, shapefile perimeter, PNG)</a>' +
+    '<a href="' + aset(rel, 'peta_waktu_tiba.png') + '" target="_blank">Peta PNG</a>' +
+    (d.run ? '<a href="' + d.run + '" target="_blank">Log run</a>' : '');
+  $('kotakHasil').hidden = false;
+}
+
+function muatRiwayat(){
+  fetch(API + '/releases?per_page=30', {cache: 'no-store'}).then(function(r){ return r.json(); }).then(function(list){
+    var sims = (list || []).filter(function(r){ return /^sim-/.test(r.tag_name || ''); });
+    var el = $('riwayat');
+    if (!sims.length) { el.textContent = 'Belum ada simulasi.'; return; }
+    el.innerHTML = '';
+    sims.forEach(function(rel){
+      var d = dataDari(rel) || {}, m = d.masukan || {};
+      var div = document.createElement('div');
+      div.textContent = new Date(rel.created_at).toLocaleString('id-ID', {dateStyle: 'medium', timeStyle: 'short'}) + ' · ' +
+        (m.mode || d.mode || '').toUpperCase() + ' · ' + (m.titik || '') + ' · ' + angka(d.luas_terbakar_ha) + ' ha';
+      div.onclick = function(){ tampil(rel); };
+      el.appendChild(div);
+    });
+  }).catch(function(){ $('riwayat').textContent = 'Riwayat tidak bisa dimuat (batas API GitHub). Coba lagi nanti.'; });
+}
+muatRiwayat();
+})();
+</script>
+</body>
+</html>

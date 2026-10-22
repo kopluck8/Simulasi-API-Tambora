@@ -129,7 +129,7 @@ def length_to_breadth(u_mph):
 
 def surface_grids(fuel, slope_deg, aspect_deg, ws20_kmh, wdir_from_deg, depth_lookup, models,
                   moist_fn, cover=None, height=None, cbh=None, cbd=None, crown=True,
-                  foliar_moisture=100.0, waf=None, wind_limit=False):
+                  foliar_moisture=100.0, waf=None, wind_limit=False, crown_method="finney"):
     """Hitung ROS kepala (m/menit), arah kepala (azimut derajat, arah menuju), eksentrisitas,
     intensitas (kW/m), panjang nyala (m), tipe api (0 tidak, 1 permukaan, 2 pasif, 3 aktif).
 
@@ -199,34 +199,90 @@ def surface_grids(fuel, slope_deg, aspect_deg, ws20_kmh, wdir_from_deg, depth_lo
             ib = rf.HA * r / 60.0 * 3.4613  # BTU/ft/s -> kW/m
             ros[gm], head[gm], ecc[gm], fli[gm] = rm, hd, e, ib
             ctype[gm] = 1
-    if crown and cbd is not None:
-        _crown(ros, head, ecc, fli, ctype, fuel, cbh, cbd, cover, ws20_kmh, wto, models, moist_fn, foliar_moisture)
     flame = np.where(fli > 0, 0.0775 * np.power(fli, 0.46), 0.0).astype(np.float32)  # Byram, m
+    if crown and cbd is not None:
+        _crown(ros, head, ecc, fli, flame, ctype, fuel, slope_deg, upslope, cbh, cbd, cover, height, ws20_kmh, wto,
+               models, moist_fn, foliar_moisture, crown_method)
     return ros, head, ecc, fli, flame, ctype
 
 
-def _crown(ros, head, ecc, fli, ctype, fuel, cbh, cbd, cover, ws20_kmh, wto, models, moist_fn, fmc):
+HC_CROWN = 18000.0  # kJ/kg, panas tajuk seperti flammap.dll
+
+
+def _r10(fuel, sel, slope_deg, upslope, ws20_kmh, wto, models, moist_fn):
+    """ROS model 10 (ft/menit) per sel, dengan kadar air model fuel sel itu sendiri, angin 0,4 x angin 20-ft
+    dan lereng (dijumlah sebagai vektor), seperti flammap.dll. Juga arah kepala dan angin untuk LB tajuk (mph)."""
+    out = np.zeros(int(sel.sum()), np.float64)
+    fs = fuel[sel]
+    tan2 = np.tan(np.radians(slope_deg[sel])) ** 2
+    up = np.radians(upslope[sel])
+    aw = np.radians(wto[sel])
+    u20 = ws20_kmh[sel] * MPH_PER_KMH * 88.0
+    hd = np.zeros(out.size)
+    lbw = np.zeros(out.size)
+    for n in np.unique(fs):
+        m = fs == n
+        mo = moist_fn(int(n), sel & (fuel == n))
+        mo = tuple(float(np.mean(x)) for x in mo)
+        rf = RothermelFuel(models[10], *mo)
+        ps = rf.slope_k * tan2[m]
+        pw = rf.phi_w(0.4 * u20[m])
+        x = pw * np.sin(aw[m]) + ps * np.sin(up[m])
+        y = pw * np.cos(aw[m]) + ps * np.cos(up[m])
+        out[m] = rf.R0 * (1 + np.hypot(x, y))
+        hd[m] = np.degrees(np.arctan2(x, y)) % 360.0
+        # LB tajuk: Anderson dengan 0,5 x angin 20-ft + angin-setara-lereng model 10 (seperti flammap.dll)
+        us = rf.eff_wind(ps)
+        ux = 0.5 * u20[m] * np.sin(aw[m]) + us * np.sin(up[m])
+        uy = 0.5 * u20[m] * np.cos(aw[m]) + us * np.cos(up[m])
+        lbw[m] = np.hypot(ux, uy) / 88.0
+    return out, hd, lbw
+
+
+def _crown(ros, head, ecc, fli, flame, ctype, fuel, slope_deg, upslope, cbh, cbd, cover, height, ws20_kmh, wto,
+           models, moist_fn, fmc, method="finney"):
+    """Api tajuk seperti flammap.dll (dicek dengan Wine):
+    - inisiasi Van Wagner (1977): FLI permukaan >= I0 = (0,010 CBH (460 + 25,9 FMC))^1,5
+    - ROS tajuk aktif Rothermel (1991) = 3,34 x ROS model 10 (kadar air sel, angin 0,4 x U20, lereng)
+    - Finney (1998): R = Rs + CFB (Rtajuk - Rs); aktif bila R >= 3/CBD, pasif tetap ROS permukaan
+      Scott & Reinhardt (2001): aktif bila Rtajuk >= 3/CBD; pasif maupun aktif menyebar dengan Rtajuk
+    - FLI = R (HA + CFB x CBD (tinggi - CBH) x 18000) / 60 dengan CFB Van Wagner (1993) untuk Finney;
+      Scott & Reinhardt: CFB = 1 dan tidak kurang dari FLI permukaan. Panjang nyala tajuk Thomas (1963)."""
     can = (ctype > 0) & (cbh > 0) & (cbd > 0) & (cover > 0)
     if not np.any(can):
         return
-    i0 = np.power(0.010 * cbh * (460.0 + 25.9 * fmc), 1.5)  # kW/m (Van Wagner 1977)
+    i0 = np.power(0.010 * cbh * (460.0 + 25.9 * fmc), 1.5)  # kW/m
     init = can & (fli >= i0)
     if not np.any(init):
         return
-    # Rothermel 1991: 3.34 x ROS FM10 dengan angin midflame = 0.4 x angin 20-ft
-    m = moist_fn(10, init)
-    m = tuple(float(np.mean(x)) for x in m)
-    rf = RothermelFuel(models[10], *m)
-    u = ws20_kmh[init] * 0.4 * MPH_PER_KMH * 88.0
-    r10 = rf.R0 * (1 + rf.phi_w(u)) * 0.3048
-    ra = 3.34 * r10
-    rcrit = 3.0 / cbd[init]
-    active = ra >= rcrit
-    sub_ros = ros[init]
-    sub_ros = np.where(active, np.maximum(ra, sub_ros), sub_ros)
-    ros[init] = sub_ros
-    ct = ctype[init]
-    ct = np.where(active, 3, 2).astype(np.int8)
-    ctype[init] = ct
-    # arah tajuk mengikuti angin
-    head[init] = np.where(active, wto[init], head[init])
+    rs = ros[init].astype(np.float64)
+    ha = fli[init] * 60.0 / np.maximum(rs, 1e-9)            # kJ/m2
+    r10, hd10, lbw = _r10(fuel, init, slope_deg, upslope, ws20_kmh, wto, models, moist_fn)
+    rac = 3.34 * r10 * 0.3048                                 # m/menit
+    c = cbd[init].astype(np.float64)
+    rcrit = 3.0 / c
+    r_init = i0[init] * 60.0 / np.maximum(ha, 1e-9)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ac = -np.log(0.1) / (0.9 * (rcrit - r_init))
+        cfb = np.clip(1.0 - np.exp(-ac * (rs - r_init)), 0.0, 1.0)
+    cfb = np.where(np.isfinite(cfb), cfb, 1.0)
+    if method in ("scott", "scott-reinhardt", "sr"):
+        active = rac >= rcrit
+        r = rac
+    else:
+        rf = rs + cfb * (rac - rs)
+        active = rf >= rcrit
+        r = np.where(active, rf, rs)
+    w = c * np.maximum(height[init] - cbh[init], 0.0)         # kg/m2
+    if method in ("scott", "scott-reinhardt", "sr"):
+        ic = np.maximum(fli[init], r * (ha + w * HC_CROWN) / 60.0)  # flammap.dll: CFB = 1, minimal FLI permukaan
+    else:
+        ic = r * (ha + cfb * w * HC_CROWN) / 60.0             # kW/m
+    ros[init] = r
+    fli[init] = ic
+    flame[init] = 0.3048 * 0.2 * np.power(ic / 3.4613, 2.0 / 3.0)  # Thomas (1963), m
+    ctype[init] = np.where(active, 3, 2).astype(np.int8)
+    lb = length_to_breadth(lbw)
+    use = np.ones_like(active) if method in ("scott", "scott-reinhardt", "sr") else active
+    ecc[init] = np.where(use, np.sqrt(lb * lb - 1) / lb, ecc[init])
+    head[init] = np.where(active, hd10, head[init])

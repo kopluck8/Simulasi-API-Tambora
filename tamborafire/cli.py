@@ -98,15 +98,42 @@ def _write_outputs(h, ls, out, args, x0, y0, step_min=60):
     if per:
         write_perimeters_shp(os.path.join(out, "perimeter.shp"), per, ls.crs_wkt, h.start)
     ha = float(np.isfinite(h.arrival).sum() * ls.res ** 2 / 1e4)
-    summ = dict(h.info, luas_terbakar_ha=round(ha, 1), sel_m=ls.res,
-                titik_api=[round(x0, 1), round(y0, 1)])
+    ct = h.crown[np.isfinite(h.arrival)]
+    tipe = {n: round(float((ct == v).sum() * ls.res ** 2 / 1e4), 1)
+            for v, n in ((1, "permukaan"), (2, "tajuk_pasif"), (3, "tajuk_aktif"))}
+    summ = dict(h.info, luas_terbakar_ha=round(ha, 1), sel_m=ls.res, metode_tajuk=getattr(args, "tajuk", "finney"),
+                luas_per_tipe_api_ha=tipe, titik_api=[round(x0, 1), round(y0, 1)])
     if getattr(args, "validasi", None):
         from .validate import evaluate
         summ["validasi"] = evaluate(h.arrival, read_polygons(args.validasi), ls, x0, y0)
     json.dump(summ, open(os.path.join(out, "ringkasan.json"), "w"), indent=1, default=str)
     _png(h, ls, os.path.join(out, "peta_waktu_tiba.png"), x0, y0, getattr(args, "validasi", None))
+    if getattr(args, "web", False):
+        _web_outputs(h, ls, out, summ)
     print(json.dumps(summ, indent=1, default=str))
     return summ
+
+
+def _web_outputs(h, ls, out, summ):
+    """Untuk halaman peta: overlay PNG transparan (waktu tiba), batas lintang/bujur, dan hasil.zip."""
+    import matplotlib
+    from PIL import Image
+    from pyproj import Transformer
+    a = np.where(np.isfinite(h.arrival), h.arrival / 60.0, np.nan)
+    vmax = float(np.nanmax(a)) if np.isfinite(a).any() else 1.0
+    rgba = (matplotlib.colormaps["inferno_r"](np.nan_to_num(a / max(vmax, 1e-6))) * 255).astype(np.uint8)
+    rgba[..., 3] = np.where(np.isfinite(a), 200, 0)
+    Image.fromarray(rgba).save(os.path.join(out, "overlay.png"))
+    tf = Transformer.from_crs(ls.crs_wkt or "EPSG:32750", 4326, always_xy=True)
+    xs, ys = tf.transform([ls.west, ls.east, ls.west, ls.east], [ls.south, ls.south, ls.north, ls.north])
+    lon0, lat0 = tf.transform(*summ["titik_api"])
+    web = dict(summ, batas=[[min(ys), min(xs)], [max(ys), max(xs)]], jam_maks=round(vmax, 2),
+               titik_latlon=[round(lat0, 5), round(lon0, 5)])
+    json.dump(web, open(os.path.join(out, "web.json"), "w"), default=str)
+    with zipfile.ZipFile(os.path.join(out, "hasil.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(os.listdir(out)):
+            if f not in ("hasil.zip", "overlay.png", "web.json"):
+                z.write(os.path.join(out, f), f)
 
 
 def _png(h, ls, path, x0, y0, scar=None):
@@ -137,7 +164,8 @@ def cmd_mtt(args, cfg):
     ls = _ls(args, cfg)
     ig = _ignition(args, ls)
     sim = Simulator(ls, _rel(args.fmd or cfg["kalibrasi"]["fmd"]), _rel(args.fms or cfg["kalibrasi"]["fms"]),
-                    ros_adjust={int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()})
+                    ros_adjust={int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()},
+                    crown=args.tajuk != "tanpa", crown_method=args.tajuk)
     h = sim.mtt(ig, args.kecepatan, args.arah, args.menit, wind=args.angin, mesh_res=args.mesh)
     x0, y0 = _ign_xy(args, ls, ig)
     return _write_outputs(h, ls, args.out, args, x0, y0, step_min=args.interval)
@@ -161,7 +189,8 @@ def cmd_farsite(args, cfg):
         os.makedirs(args.out, exist_ok=True)
         WX.write_wxs(wx, os.path.join(args.out, f"cuaca_{lat:.4f}_{lon:.4f}.wxs"))
     sim = Simulator(ls, _rel(args.fmd or cfg["kalibrasi"]["fmd"]), _rel(args.fms or cfg["kalibrasi"]["fms"]),
-                    ros_adjust={int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()})
+                    ros_adjust={int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()},
+                    crown=args.tajuk != "tanpa", crown_method=args.tajuk)
     ov = {}
     if args.kecepatan is not None:
         ov["ws"] = args.kecepatan
@@ -437,6 +466,9 @@ def main(argv=None):
         q.add_argument("--mesh", type=float, default=100, help="resolusi mesh WindNinja (m)")
         q.add_argument("--interval", type=float, default=60, help="interval perimeter (menit)")
         q.add_argument("--validasi", help="poligon bekas terbakar untuk dibandingkan (.shp)")
+        q.add_argument("--tajuk", default="finney", choices=["finney", "scott", "tanpa"],
+                       help="metode api tajuk FlamMap: Finney (1998), Scott/Reinhardt (2001), atau tanpa api tajuk")
+        q.add_argument("--web", action="store_true", help="tulis juga overlay PNG + web.json + hasil.zip untuk halaman peta")
         q.add_argument("--out", required=True)
 
     q = sp.add_parser("mtt", help="seperti MTT FlamMap: angin & kadar air tetap")

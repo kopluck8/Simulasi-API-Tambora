@@ -40,13 +40,14 @@ def _apply_ros_adjust(ros, fuel, adjust):
 
 
 class Simulator:
-    def __init__(self, ls, fmd=None, fms=None, crown=True, foliar=100.0, ros_adjust=None):
+    def __init__(self, ls, fmd=None, fms=None, crown=True, foliar=100.0, ros_adjust=None, crown_method="finney"):
         self.ls = ls
         self.p = ls.physical()
         self.models = fuel_table(fmd)
         self.fms = read_fms(fms) if fms else {0: (6, 7, 8, 60, 90)}
         self.crown = crown
         self.foliar = foliar
+        self.crown_method = crown_method   # "finney" (1998) atau "scott" (Scott & Reinhardt 2001)
         self.ros_adjust = ros_adjust or {}
         self.depth = _depth_lookup(self.models)
         p = self.p
@@ -59,7 +60,8 @@ class Simulator:
         wd_a = np.broadcast_to(np.asarray(wd, np.float32), p["fuel"].shape)
         ros, head, ecc, fli, flame, ct = R.surface_grids(
             p["fuel"], p["slope"], p["aspect"], ws_a, wd_a, self.depth, self.models, moist.get,
-            p["cover"], p["height"], p["cbh"], p["cbd"], self.crown, self.foliar, self.waf)
+            p["cover"], p["height"], p["cbh"], p["cbd"], self.crown, self.foliar, self.waf,
+            crown_method=self.crown_method)
         _apply_ros_adjust(ros, p["fuel"], self.ros_adjust)
         return ros, head, ecc, fli, flame, ct
 

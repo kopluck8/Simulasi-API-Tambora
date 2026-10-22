@@ -1,10 +1,11 @@
 name: Simulasi api
+run-name: "Simulasi ${{ inputs.mode }} ${{ inputs.titik }} [${{ inputs.id }}]"
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "mtt (angin tetap) atau farsite (cuaca per jam)"
+        description: "farsite (cuaca per jam) atau mtt (angin tetap)"
         type: choice
         options: [farsite, mtt]
         default: farsite
@@ -16,20 +17,18 @@ on:
         description: "FARSITE: waktu mulai WITA 'YYYY-MM-DD HH:MM'"
         required: false
         default: "2026-09-09 13:00"
-      jam:
-        description: "FARSITE: lama simulasi (jam)"
+      lama_jam:
+        description: "Lama simulasi (jam)"
         default: "24"
-      kecepatan:
-        description: "Angin 20-ft km/j (MTT wajib; FARSITE kosong = dari cuaca)"
+      angin:
+        description: "Angin 20-ft 'km/j,arah asal' (MTT wajib, mis. 20,70; FARSITE kosong = dari cuaca per jam)"
         required: false
         default: ""
-      arah:
-        description: "Arah ASAL angin, derajat (MTT wajib; FARSITE kosong = dari cuaca)"
-        required: false
-        default: ""
-      menit:
-        description: "MTT: lama simulasi (menit)"
-        default: "480"
+      tajuk:
+        description: "Metode api tajuk (Crown Fire Calculation Method)"
+        type: choice
+        options: [finney, scott, tanpa]
+        default: finney
       radius_km:
         description: "Analysis Area (km dari titik api)"
         default: "8"
@@ -41,6 +40,13 @@ on:
         type: choice
         options: [drive, contoh]
         default: drive
+      id:
+        description: "ID permintaan (diisi otomatis oleh halaman peta; boleh kosong)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
 
 jobs:
   simulasi:
@@ -54,6 +60,7 @@ jobs:
       GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
       GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
       GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+      ID: ${{ inputs.id || github.run_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,22 +78,56 @@ jobs:
             echo "lcp=contoh/piong_9sep/landscape_prakebakaran_9sep_30m.lcp" >> "$GITHUB_OUTPUT"
           fi
       - name: Jalankan
+        env:
+          TITIK: ${{ inputs.titik }}
+          MULAI: ${{ inputs.mulai }}
+          LAMA: ${{ inputs.lama_jam }}
+          ANGIN: ${{ inputs.angin }}
+          RADIUS: ${{ inputs.radius_km }}
+          RES: ${{ inputs.res }}
         run: |
-          OUT="kerja/simulasi/$(date -u +%Y%m%d_%H%M)_${{ inputs.mode }}"
+          OUT="kerja/simulasi/$(date -u +%Y%m%d_%H%M)_${{ inputs.mode }}_$ID"
           echo "OUT=$OUT" >> "$GITHUB_ENV"
-          ARGS="--lcp ${{ steps.ls.outputs.lcp }} --latlon=${{ inputs.titik }} --buffer 30 --radius-km ${{ inputs.radius_km }} --res ${{ inputs.res }} --out $OUT"
+          ARGS="--lcp ${{ steps.ls.outputs.lcp }} --latlon=$TITIK --buffer 30 --radius-km $RADIUS --res $RES --tajuk ${{ inputs.tajuk }} --web --out $OUT"
+          KEC=""; ARAH=""
+          if [ -n "$ANGIN" ]; then KEC="${ANGIN%%,*}"; ARAH="${ANGIN##*,}"; fi
           if [ "${{ inputs.mode }}" = "mtt" ]; then
-            python -m tamborafire mtt $ARGS --kecepatan "${{ inputs.kecepatan }}" --arah "${{ inputs.arah }}" --menit ${{ inputs.menit }}
+            [ -n "$KEC" ] || { echo "MTT perlu angin 'km/j,arah'"; exit 1; }
+            MENIT=$(python -c "print(float('$LAMA')*60)")
+            python -m tamborafire mtt $ARGS --kecepatan "$KEC" --arah "$ARAH" --menit "$MENIT"
           else
             EXTRA=""
-            [ -n "${{ inputs.kecepatan }}" ] && EXTRA="$EXTRA --kecepatan ${{ inputs.kecepatan }}"
-            [ -n "${{ inputs.arah }}" ] && EXTRA="$EXTRA --arah ${{ inputs.arah }}"
-            python -m tamborafire farsite $ARGS --mulai "${{ inputs.mulai }}" --jam ${{ inputs.jam }} $EXTRA
+            [ -n "$KEC" ] && EXTRA="--kecepatan $KEC --arah $ARAH"
+            python -m tamborafire farsite $ARGS --mulai "$MULAI" --jam "$LAMA" $EXTRA
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: simulasi-${{ github.run_number }}
           path: ${{ env.OUT }}
+      - name: Terbitkan hasil untuk halaman peta (GitHub Release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          IN_MODE: ${{ inputs.mode }}
+          IN_TITIK: ${{ inputs.titik }}
+          IN_MULAI: ${{ inputs.mulai }}
+          IN_LAMA: ${{ inputs.lama_jam }}
+          IN_ANGIN: ${{ inputs.angin }}
+          IN_TAJUK: ${{ inputs.tajuk }}
+          IN_LS: ${{ inputs.landscape }}
+          IN_RES: ${{ inputs.res }}
+        run: |
+          python - <<'PY'
+          import json, os
+          e = os.environ
+          out = e["OUT"]
+          d = json.load(open(os.path.join(out, "web.json")))
+          d["run"] = e["RUN_URL"]
+          d["masukan"] = {k: e["IN_" + k.upper()] for k in ("mode", "titik", "mulai", "lama", "angin", "tajuk", "ls", "res")}
+          open(os.path.join(out, "catatan.md"), "w").write("```json\n" + json.dumps(d, default=str) + "\n```\n")
+          PY
+          gh release create "sim-$ID" --prerelease --title "Simulasi $IN_MODE $IN_TITIK ($ID)" \
+            --notes-file "$OUT/catatan.md" "$OUT/overlay.png" "$OUT/peta_waktu_tiba.png" "$OUT/hasil.zip" "$OUT/web.json"
       - name: Simpan ke Google Drive
         if: env.GDRIVE_FOLDER_ID != ''
         run: python -m tamborafire unggah "$OUT" --ke "simulasi/$(basename $OUT)"
