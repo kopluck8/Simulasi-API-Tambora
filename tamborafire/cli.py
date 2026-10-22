@@ -214,7 +214,10 @@ def cmd_update(args, cfg):
         print(f"Folder Drive: {inf['name']}  (boleh menulis: {inf.get('capabilities', {}).get('canAddChildren')})")
         isi = [f["name"] for f in drive.ls(root)]
         print("Isi folder induk:", ", ".join(isi) or "(kosong)")
-        fid_dasar = drive.path(cfg["drive"]["dasar"], root)
+        if cfg["dasar"]["elev"] in isi:
+            fid_dasar = root  # GeoTIFF dasar langsung di folder induk
+        else:
+            fid_dasar = drive.path(cfg["drive"]["dasar"], root)
         if not args.lokal_dasar:
             need = [cfg["dasar"][k] for k in L.LAYER_KEYS] + [cfg["dasar"]["nbr"]]
             drive.sync_down(fid_dasar, dasar, need)
