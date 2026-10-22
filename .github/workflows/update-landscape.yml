@@ -16,6 +16,10 @@ on:
         description: "Uji saja: jangan unggah ke Drive / jangan ubah status"
         type: boolean
         default: false
+      diagnostik:
+        description: "Simpan komposit tiap jendela ke cabang 'diagnostik' (untuk penyetelan)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -52,7 +56,18 @@ jobs:
         run: |
           python -m tamborafire update-mingguan --kerja kerja --status docs/status/landscape_terbaru.json \
             ${{ inputs.tanggal && format('--tanggal {0}', inputs.tanggal) || '' }} \
-            ${{ inputs.mulai_ulang && '--mulai-ulang' || '' }} ${{ inputs.tanpa_unggah && '--tanpa-unggah' || '' }}
+            ${{ inputs.mulai_ulang && '--mulai-ulang' || '' }} ${{ inputs.tanpa_unggah && '--tanpa-unggah' || '' }} \
+            ${{ inputs.diagnostik && '--simpan-komposit kerja/diagnostik' || '' }}
+      - name: Simpan diagnostik ke cabang diagnostik
+        if: ${{ inputs.diagnostik }}
+        run: |
+          cp kerja/hasil/ringkasan.json kerja/hasil/pratinjau_fuel.png kerja/diagnostik/
+          cd kerja/diagnostik
+          git init -q -b diagnostik
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add . && git commit -qm "Diagnostik $(date -u +%F)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" diagnostik
       - uses: actions/upload-artifact@v4
         with:
           name: landscape-${{ github.run_number }}

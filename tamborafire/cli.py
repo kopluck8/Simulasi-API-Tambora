@@ -281,6 +281,11 @@ def cmd_update(args, cfg):
         except RuntimeError as e:
             print(" ", e)
             continue
+        if args.simpan_komposit:
+            os.makedirs(args.simpan_komposit, exist_ok=True)
+            q = lambda a: np.where(np.isfinite(a[::3, ::3]), np.round(a[::3, ::3] * 10000), -32768).astype(np.int16)
+            np.savez_compressed(os.path.join(args.simpan_komposit, f"komposit_{w0}_{w1}.npz"), nbr=q(comp["nbr"]),
+                                ndvi=q(comp["ndvi"]), n=comp["n"][::3, ::3].astype(np.uint8))
         fuel, scar, ndvi, dnbr, nbr_ref, info = L.update(lay, nbr_ref, comp, cfg, scar)
         used_all += used
         per.append(dict(jendela=f"{w0}/{w1}", citra=len(used), baru_ha=info["bekas_terbakar_baru_ha"],
@@ -448,6 +453,7 @@ def main(argv=None):
     q.add_argument("--lokal-dasar", help="folder GeoTIFF dasar lokal (lewati unduh dari Drive)")
     q.add_argument("--tanpa-drive", action="store_true"), q.add_argument("--status")
     q.add_argument("--tanpa-unggah", action="store_true", help="uji: jangan unggah hasil ke Drive")
+    q.add_argument("--simpan-komposit", metavar="DIR", help="diagnostik: simpan median NBR/NDVI tiap jendela (30 m) ke DIR")
     q.add_argument("--mulai-ulang", action="store_true", help="abaikan status lama, hitung ulang sejak awal musim")
     q.set_defaults(f=cmd_update)
 
