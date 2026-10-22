@@ -123,3 +123,35 @@ def test_update_mingguan_tandai_bekas_terbakar():
     assert info["bekas_terbakar_baru_ha"] == pytest.approx(9.0)
     assert info["kandidat_gugur_ha"] == pytest.approx(9.0)
     assert ref[0, 10] == pytest.approx(0.18, abs=1e-4)   # acuan bergulir diperbarui
+
+
+def test_update_mingguan_dengan_hotspot():
+    from tamborafire import landscape as L
+    import tomllib
+    cfg = tomllib.load(open(os.path.join(ROOT, "config", "tambora.toml"), "rb"))
+    cfg["aoi"]["res"] = 30
+    n = 50
+    lay = {"fuel": np.full((n, n), 31, np.int16)}
+    nbr0 = np.full((n, n), 0.30, np.float32)
+    b8 = np.full((n, n), 3000.0, np.float32)
+    b4 = np.full((n, n), 1500.0, np.float32)
+    nbr_now = np.full((n, n), 0.25, np.float32)
+    nbr_now[5:15, 5:15] = 0.0                          # kebakaran dengan hotspot
+    nbr_now[30:40, 30:40] = 0.0                        # gelap tanpa hotspot -> diabaikan
+    b12 = b8 * (1 - nbr_now) / (1 + nbr_now)
+    hot = np.zeros((n, n), bool)
+    hot[9, 9] = True
+    f, st, ndvi, dnbr, ref, info = L.update(lay, nbr0, dict(b04=b4, b08=b8, b12=b12), cfg, hotspot=hot)
+    assert (f[5:15, 5:15] == 99).all() and (st[30:40, 30:40] == 0).all()
+    assert info["bekas_terbakar_baru_ha"] == pytest.approx(9.0)
+    assert info["tanpa_hotspot_diabaikan_ha"] == pytest.approx(9.0)
+
+
+def test_firms_mask():
+    from tamborafire import firms
+    from rasterio.transform import from_origin
+    tr = from_origin(600000, 9090000, 10, 10)
+    from pyproj import Transformer
+    lon, lat = Transformer.from_crs("EPSG:32750", "EPSG:4326", always_xy=True).transform(600505, 9089495)
+    m = firms.mask([dict(lat=lat, lon=lon)], (100, 100), tr, 32750, 100)
+    assert m[50, 50] and m[50, 59] and not m[50, 62] and m.sum() > 250

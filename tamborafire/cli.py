@@ -271,6 +271,16 @@ def cmd_update(args, cfg):
         ref_mask = _rz([(read_polygons(p_val), 1)], out_shape=lay["fuel"].shape, transform=tr).astype(bool)
     fuel = lay["fuel"].copy()
     info = {}
+    from . import firms
+    hot_pts = None
+    if firms.key() and wins:
+        try:
+            hot_pts = firms.fetch(cfg, wins[0][0] - dt.timedelta(days=int(k["hari"])), wins[-1][1])
+            print(f"Hotspot FIRMS: {len(hot_pts)} titik di sekitar AOI")
+        except Exception as e:  # tanpa hotspot tetap jalan dengan konfirmasi jendela berikutnya
+            print("Hotspot FIRMS gagal diambil, pakai konfirmasi jendela berikutnya:", e)
+    else:
+        print("FIRMS_MAP_KEY kosong: bekas terbakar baru dihitung setelah jendela berikutnya masih gelap")
     for w0, w1 in wins:
         items = S2.search(cfg, w1, 0, k["stac"], k["awan_maks"], start=w0)
         print(f"== {w0} s.d. {w1}: {len(items)} citra")
@@ -286,7 +296,13 @@ def cmd_update(args, cfg):
             q = lambda a: np.where(np.isfinite(a[::3, ::3]), np.round(a[::3, ::3] * 10000), -32768).astype(np.int16)
             np.savez_compressed(os.path.join(args.simpan_komposit, f"komposit_{w0}_{w1}.npz"), nbr=q(comp["nbr"]),
                                 ndvi=q(comp["ndvi"]), n=comp["n"][::3, ::3].astype(np.uint8))
-        fuel, scar, ndvi, dnbr, nbr_ref, info = L.update(lay, nbr_ref, comp, cfg, scar)
+        hot = None
+        if hot_pts is not None:
+            a0 = (w0 - dt.timedelta(days=int(k["hari"]))).isoformat()
+            pts = [p for p in hot_pts if a0 <= p["tanggal"] <= w1.isoformat()]
+            hot = firms.mask(pts, lay["fuel"].shape, tr, cfg["aoi"]["epsg"], float(k.get("hotspot_buffer_m", 750)))
+            print(f"   hotspot {a0} s.d. {w1}: {len(pts)} titik")
+        fuel, scar, ndvi, dnbr, nbr_ref, info = L.update(lay, nbr_ref, comp, cfg, scar, hotspot=hot)
         used_all += used
         per.append(dict(jendela=f"{w0}/{w1}", citra=len(used), baru_ha=info["bekas_terbakar_baru_ha"],
                         koreksi=info["koreksi_musiman_dnbr"]))
@@ -295,6 +311,9 @@ def cmd_update(args, cfg):
                 f"menunggu {info['kandidat_menunggu_ha']} ha; per kelompok {info['baru_per_kelompok_ha']}; "
                 f"elevasi p10/50/90 {info.get('baru_elevasi_persentil_m')}")
         per[-1].update(kandidat_baru_ha=info["kandidat_baru_ha"], kandidat_gugur_ha=info["kandidat_gugur_ha"])
+        if "tanpa_hotspot_diabaikan_ha" in info:
+            msg += f"; petak gelap tanpa hotspot diabaikan {info['tanpa_hotspot_diabaikan_ha']} ha"
+            per[-1]["tanpa_hotspot_diabaikan_ha"] = info["tanpa_hotspot_diabaikan_ha"]
         if ref_mask is not None and ref_mask.any():
             hit = (scar == 1) & ref_mask
             cand = (scar == 2) & ref_mask

@@ -89,7 +89,7 @@ def remove_small(mask, res, min_ha):
     return keep[lab]
 
 
-METODE = "dnbr-median-bergulir-v4"
+METODE = "dnbr-median-bergulir-v5"
 
 
 def _groups(fuel0):
@@ -99,19 +99,40 @@ def _groups(fuel0):
     return [("rumput", grass), ("hutan/semak", other)]
 
 
-def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
-    """Satu langkah update.
+def local_offset(dnbr, group, seen, blk):
+    """Koreksi musiman LOKAL: median dNBR kelompok per blok blk x blk piksel, dihaluskan 3x3 blok.
+    Dataran rendah mengering lebih dulu daripada lereng atas, jadi satu median se-AOI tidak cukup."""
+    from scipy import ndimage
+    m = group & seen
+    gm = float(np.median(dnbr[m])) if m.any() else 0.0
+    H, W = dnbr.shape
+    nb = (-(-H // blk), -(-W // blk))
+    grid = np.full(nb, gm, np.float32)
+    for i in range(nb[0]):
+        for j in range(nb[1]):
+            sl = (slice(i * blk, (i + 1) * blk), slice(j * blk, (j + 1) * blk))
+            mm = m[sl]
+            if mm.sum() > 0.01 * blk * blk:
+                grid[i, j] = np.median(dnbr[sl][mm])
+    grid = ndimage.median_filter(grid, 3, mode="nearest")
+    return np.kron(grid, np.ones((blk, blk), np.float32))[:H, :W], gm
 
-    nbr_ref: NBR acuan per piksel = pengamatan cerah terakhir SEBELUM jendela ini (bergulir), bukan
-    median Juni-Juli. Dengan begitu yang terdeteksi hanya perubahan dalam ~3 minggu terakhir.
-    Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok fuel
-    (dNBR offset, Parks dkk. 2014), lalu ambang dNBR_terkoreksi > dnbr_ambang.
-    Piksel yang lolos menjadi KANDIDAT (2) dulu; baru menjadi bekas terbakar (1, fuel 99) bila jendela
-    berikutnya masih gelap dibanding NBR pra-kebakarannya. Ini membuang derau satu-jendela.
 
-    composite: dict ndvi, nbr (median jendela, DN mentah), n (jumlah pengamatan cerah),
-    atau dict b04,b08,b12 (satu pengamatan; dipakai di tes).
+def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None, hotspot=None):
+    """Satu langkah update (satu jendela citra).
+
+    nbr_ref: NBR acuan per piksel = pengamatan cerah terakhir SEBELUM jendela ini (bergulir).
+    dNBR = nbr_ref - NBR median jendela. Pengeringan musiman dikoreksi dengan mengurangkan median dNBR
+    LOKAL (blok ~1,5 km) per kelompok fuel. Bekas terbakar dicari seperti produk burned-area global:
+    piksel benih rumput yang sangat gelap (dnbr_benih) lalu tumbuh ke tetangga yang cukup gelap (dnbr_ambang).
+
+    hotspot: raster bool area sekitar titik panas FIRMS pada periode jendela. Bila ada, hanya petak yang
+    menyentuh hotspot yang dihitung bekas terbakar (langsung, 1). Bila tidak ada (tanpa FIRMS_MAP_KEY),
+    petak baru menjadi KANDIDAT (2) dan baru dihitung bila jendela berikutnya masih gelap.
+
+    composite: dict ndvi, nbr (median jendela), n (jumlah pengamatan cerah), atau dict b04,b08,b12.
     Mengembalikan (fuel, status 0/1/2, ndvi, dnbr_terkoreksi, nbr_ref_baru, ringkasan)."""
+    from scipy import ndimage
     k = cfg["mingguan"]
     mode = mode or k["mode_kelas"]
     fuel0 = base_layers["fuel"].astype(np.int16)
@@ -126,52 +147,65 @@ def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
         with np.errstate(invalid="ignore", divide="ignore"):
             ndvi = (b8 - b4) / (b8 + b4)
             nbr = (b8 - b12) / (b8 + b12)
+    res = float(cfg["aoi"]["res"])
+    ha = res * res / 1e4
     seen = np.isfinite(ndvi) & np.isfinite(nbr) & np.isfinite(nbr_ref)
     dnbr = (nbr_ref - nbr).astype(np.float32)
     adj = np.full(dnbr.shape, np.nan, np.float32)
-    offsets = {}
     offmap = np.zeros(dnbr.shape, np.float32)
+    blk = max(1, int(round(float(k.get("koreksi_blok_km", 1.5)) * 1000 / res)))
+    offsets = {}
     for name, g in _groups(fuel0):
         m = g & seen
         if m.sum() < 1000:
             continue
-        off = float(np.median(dnbr[m]))
-        offsets[name] = round(off, 4)
-        offmap[g] = off
-        adj[m] = dnbr[m] - off
+        off, gm = local_offset(dnbr, g, seen, blk)
+        offsets[name] = round(gm, 4)
+        offmap[g] = off[g]
+        adj[m] = dnbr[m] - off[m]
     burnable = np.isfinite(adj)
     amb = float(k["dnbr_ambang"])
-    res = float(cfg["aoi"]["res"])
-    # status per piksel: 0 belum, 1 bekas terbakar terkonfirmasi, 2 kandidat (menunggu jendela berikutnya)
+    benih = float(k.get("dnbr_benih", 0.15))
+    minha = k.get("luas_min_ha", 1.0)
     prev = np.zeros(fuel0.shape, np.uint8) if scar_prev is None else scar_prev.astype(np.uint8)
     conf_prev, cand_prev = prev == 1, prev == 2
-    # kandidat lama: NBR acuannya ditahan pada nilai pra-kebakaran, jadi dNBR sekarang = perubahan sejak sebelum api.
-    # Terkonfirmasi bila masih gelap (bekas arang bertahan selama kemarau), gugur bila sudah pulih.
+    # kandidat lama (hanya tanpa hotspot): acuan ditahan pada nilai pra-kebakaran
     keep = float(k.get("konfirmasi_faktor", 0.7)) * amb
-    confirm = cand_prev & burnable & (adj > keep) & (dnbr > keep)
-    confirm = remove_small(confirm, res, k.get("luas_min_ha", 1.0))
+    confirm = remove_small(cand_prev & burnable & (adj > keep) & (dnbr > keep), res, minha)
     drop = cand_prev & burnable & ~confirm
     still = cand_prev & ~burnable
-    # kandidat baru: penurunan NBR terkoreksi DAN mentah melewati ambang
-    new_c = burnable & (adj > amb) & (dnbr > amb) & ~conf_prev & ~cand_prev
-    new_c = remove_small(new_c, res, k.get("luas_min_ha", 1.0))
-    if not k.get("perlu_konfirmasi", True):
-        confirm, new_c = confirm | new_c, np.zeros_like(new_c)
+    # petak baru: benih rumput sangat gelap, tumbuh ke tetangga yang cukup gelap
+    seed = burnable & grass & (adj > benih) & (dnbr > benih)
+    grow = burnable & (adj > amb) & (dnbr > amb)
+    lab, _ = ndimage.label(grow | seed, structure=np.ones((3, 3)))
+    hit = np.unique(lab[seed])
+    patch = np.isin(lab, hit[hit > 0]) & ~conf_prev & ~cand_prev
+    patch = remove_small(patch, res, minha)
+    info_hot = {}
+    if hotspot is not None:
+        lab2, _ = ndimage.label(patch, structure=np.ones((3, 3)))
+        h = np.unique(lab2[patch & hotspot])
+        with_hot = np.isin(lab2, h[h > 0])
+        info_hot = dict(tanpa_hotspot_diabaikan_ha=round(float((patch & ~with_hot).sum() * ha), 1))
+        confirm = confirm | with_hot
+        new_c = np.zeros_like(patch)
+    elif k.get("perlu_konfirmasi", True):
+        new_c = patch
+    else:
+        confirm, new_c = confirm | patch, np.zeros_like(patch)
     status = np.zeros(fuel0.shape, np.uint8)
     status[conf_prev | confirm] = 1
     status[(still | new_c) & (status == 0)] = 2
     scar = status == 1
-    # NBR acuan bergulir; untuk kandidat tahan nilai pra-kebakaran, digeser dengan perubahan musiman
-    # kelompoknya, supaya jendela berikutnya membandingkan dengan "seandainya tidak terbakar"
+    # NBR acuan bergulir; untuk kandidat tahan nilai pra-kebakaran, digeser dengan perubahan musiman lokal
     ref_new = np.where(status == 2, nbr_ref - offmap, np.where(np.isfinite(nbr), nbr, nbr_ref)).astype(np.float32)
     fuel = fuel0.copy()
-    ha = res * res / 1e4
-    info = dict(mode=mode, metode=METODE,
+    info = dict(mode=mode, metode=METODE, hotspot=hotspot is not None,
                 piksel_cerah_persen=round(100 * float(seen[grass].mean()) if grass.any() else 0, 1),
                 koreksi_musiman_dnbr=offsets,
                 kandidat_baru_ha=round(float(new_c.sum() * ha), 1),
                 kandidat_gugur_ha=round(float(drop.sum() * ha), 1),
-                kandidat_menunggu_ha=round(float((status == 2).sum() * ha), 1))
+                kandidat_menunggu_ha=round(float((status == 2).sum() * ha), 1), **info_hot)
     if mode in ("batas", "kuantil"):
         cls, b = classify(ndvi, grass & np.isfinite(ndvi), mode, cfg)
         upd = grass & np.isfinite(ndvi)
@@ -184,8 +218,7 @@ def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
     info["baru_per_kelompok_ha"] = {n: round(float((newly & g).sum() * ha), 1) for n, g in _groups(fuel0)}
     elev = base_layers.get("elev")
     if elev is not None and newly.any():
-        e = elev[newly]
-        info["baru_elevasi_persentil_m"] = [int(v) for v in np.percentile(e, [10, 50, 90])]
+        info["baru_elevasi_persentil_m"] = [int(v) for v in np.percentile(elev[newly], [10, 50, 90])]
     info["luas_fuel_ha"] = {str(int(v)): round(float(c * ha), 1) for v, c in zip(*np.unique(fuel, return_counts=True))}
     return fuel, status, ndvi.astype(np.float32), adj, ref_new, info
 

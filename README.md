@@ -89,18 +89,20 @@ Panduan rinci langkah demi langkah: [docs/PANDUAN_GOOGLE_DRIVE.md](docs/PANDUAN_
 1. Buat folder di Drive dan unggah 9 GeoTIFF dasar ke subfolder `dasar`.
 2. Pasang Web App Apps Script penghubung (`apps-script/Kode.gs`). Tidak perlu Google Cloud atau verifikasi.
 3. Isi secrets GitHub: `GDRIVE_FOLDER_ID`, `GDRIVE_TOKEN_URL`, `GDRIVE_KUNCI`.
+4. Disarankan: secret `FIRMS_MAP_KEY` (gratis, https://firms.modaps.eosdis.nasa.gov/api/map_key/) supaya bekas terbakar dicocokkan dengan titik panas VIIRS/MODIS.
 
 ## Update landscape mingguan
 
 Workflow `Update landscape mingguan` berjalan tiap Senin 07:00 WITA. Bisa juga dijalankan manual dari tab Actions.
 
 1. Unduh GeoTIFF dasar dari Drive (di-cache di Actions).
-2. Cari Sentinel-2 L2A 21 hari terakhir (Planetary Computer, tanpa akun). Untuk tiap piksel, ambil pengamatan cerah paling baru (awan dan bayangan dimasking dengan SCL).
-3. Deteksi bekas terbakar dengan **dNBR bergulir**:
-   - dNBR = NBR acuan − NBR terbaru. NBR acuan adalah pengamatan cerah terakhir *sebelum* jendela ini, disimpan sebagai `nbr_acuan.tif` di Drive.
-   - Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok (rumput, hutan/semak).
-   - Piksel dengan dNBR terkoreksi > 0,10 (petak ≥ 1 ha) ditandai sebagai bekas terbakar.
-   - Bekas terbakar diakumulasi sejak awal musim (1 Juni) dan diberi fuel 99 (tidak terbakar lagi).
+2. Cari Sentinel-2 L2A per jendela 21 hari (Planetary Computer, tanpa akun). Tiap piksel diambil median pengamatan cerahnya (awan, bayangan, dan tepi awan 3 piksel dimasking dengan SCL); piksel dengan kurang dari 2 pengamatan cerah dilewati.
+3. Deteksi bekas terbakar:
+   - dNBR = NBR acuan − NBR jendela ini. NBR acuan adalah pengamatan cerah terakhir *sebelum* jendela ini (`nbr_acuan.tif` di Drive).
+   - Pengeringan musiman dikoreksi secara **lokal**: median dNBR per blok 1,5 km per kelompok (rumput, hutan/semak), karena dataran rendah mengering lebih dulu.
+   - Petak bekas terbakar harus memuat piksel rumput yang sangat gelap (dNBR terkoreksi > 0,15), lalu tumbuh ke tetangga dengan dNBR terkoreksi > 0,08; petak < 1 ha diabaikan.
+   - Dengan `FIRMS_MAP_KEY`: hanya petak yang berjarak ≤ 750 m dari titik panas VIIRS/MODIS pada periode itu yang dihitung. Tanpa kunci: petak menjadi kandidat dulu dan baru dihitung bila jendela berikutnya masih gelap.
+   - `bekas_terbakar_musim.tif`: 1 = bekas terbakar (fuel 99, tidak terbakar lagi), 2 = kandidat. Diakumulasi sejak 1 Juni.
    - Pada run pertama, atau dengan opsi *mulai ulang*, seluruh musim dihitung ulang per jendela 21 hari.
 4. Tulis `.lcp` 10 m, unggah ke Drive, dan catat ringkasan di `docs/status/`. Ringkasan ini tampil di GitHub Pages.
 

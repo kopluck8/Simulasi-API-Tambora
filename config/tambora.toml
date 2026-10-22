@@ -43,8 +43,11 @@ mode_kelas = "dasar"          # "dasar": K1-K4 tetap dari awal kemarau, hanya be
                               # "kuantil": K1-K4 dari kuantil NDVI terbaru dengan proporsi tetap di bawah
 batas_ndvi = [0.317, 0.593, 0.781]
 proporsi = [0.033, 0.430, 0.418, 0.118]
-dnbr_ambang = 0.10            # bekas terbakar baru bila dNBR (median jendela, terkoreksi musiman) > ambang
-perlu_konfirmasi = true       # kandidat baru dihitung bekas terbakar bila jendela berikutnya masih gelap
+dnbr_ambang = 0.08            # petak bekas terbakar tumbuh ke piksel dengan dNBR terkoreksi > ambang ini
+dnbr_benih = 0.15             # ... asalkan petak memuat piksel rumput dengan dNBR terkoreksi > dnbr_benih
+koreksi_blok_km = 1.5         # koreksi pengeringan musiman = median dNBR lokal per blok ini
+hotspot_buffer_m = 750        # dengan FIRMS_MAP_KEY: petak harus berjarak <= ini dari titik panas VIIRS/MODIS
+perlu_konfirmasi = true       # tanpa FIRMS_MAP_KEY: kandidat baru dihitung bekas terbakar bila jendela berikutnya masih gelap
 konfirmasi_faktor = 0.7       # ... yaitu dNBR terkoreksi > 0,7 x dnbr_ambang dibanding NBR pra-kebakaran
                               # bekas_terbakar_musim.tif: 1 = bekas terbakar, 2 = kandidat (belum fuel 99)
 pengamatan_min = 2            # minimal pengamatan cerah per piksel dalam jendela
