@@ -277,6 +277,9 @@ def cmd_update(args, cfg):
         try:
             hot_pts = firms.fetch(cfg, wins[0][0] - dt.timedelta(days=int(k["hari"])), wins[-1][1])
             print(f"Hotspot FIRMS: {len(hot_pts)} titik di sekitar AOI")
+            if args.simpan_komposit:
+                os.makedirs(args.simpan_komposit, exist_ok=True)
+                json.dump(hot_pts, open(os.path.join(args.simpan_komposit, "hotspot_firms.json"), "w"))
         except Exception as e:  # tanpa hotspot tetap jalan dengan konfirmasi jendela berikutnya
             print("Hotspot FIRMS gagal diambil, pakai konfirmasi jendela berikutnya:", e)
     else:
