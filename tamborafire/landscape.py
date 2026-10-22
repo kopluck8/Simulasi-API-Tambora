@@ -89,9 +89,26 @@ def remove_small(mask, res, min_ha):
     return keep[lab]
 
 
-def update(base_layers, nbr0, composite, cfg, scar_prev=None, mode=None):
-    """composite: dict b04,b08,b12 (float DN mentah, NaN = tidak ada pengamatan cerah).
-    Mengembalikan (fuel baru, bekas_terbakar_musim, ringkasan)."""
+METODE = "dnbr-bergulir-v2"
+
+
+def _groups(fuel0):
+    """Kelompok untuk koreksi perubahan musiman: rumput K1-K4, lainnya (hutan/semak)."""
+    grass = (fuel0 >= 30) & (fuel0 <= 33)
+    other = ((fuel0 >= 100) & (fuel0 < 300)) | ((fuel0 >= 1) & (fuel0 <= 13))
+    return [("rumput", grass), ("hutan/semak", other)]
+
+
+def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
+    """Satu langkah update.
+
+    nbr_ref: NBR acuan per piksel = pengamatan cerah terakhir SEBELUM jendela ini (bergulir), bukan
+    median Juni-Juli. Dengan begitu yang terdeteksi hanya perubahan dalam ~3 minggu terakhir.
+    Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok fuel
+    (dNBR offset, Parks dkk. 2014), lalu ambang dNBR_terkoreksi > dnbr_ambang.
+
+    composite: dict b04,b08,b12 (DN mentah, NaN = tidak cerah).
+    Mengembalikan (fuel, bekas_terbakar_musim, ndvi, dnbr_terkoreksi, nbr_ref_baru, ringkasan)."""
     k = cfg["mingguan"]
     mode = mode or k["mode_kelas"]
     fuel0 = base_layers["fuel"].astype(np.int16)
@@ -100,18 +117,32 @@ def update(base_layers, nbr0, composite, cfg, scar_prev=None, mode=None):
     with np.errstate(invalid="ignore", divide="ignore"):
         ndvi = (b8 - b4) / (b8 + b4)
         nbr = (b8 - b12) / (b8 + b12)
-    seen = np.isfinite(ndvi) & np.isfinite(nbr)
-    dnbr = nbr0 - nbr
-    burnable = (fuel0 >= 30) & (fuel0 < 90) | ((fuel0 >= 100) & (fuel0 < 300))
-    new_scar = seen & burnable & (dnbr > k["dnbr_ambang"])
+    seen = np.isfinite(ndvi) & np.isfinite(nbr) & np.isfinite(nbr_ref)
+    dnbr = (nbr_ref - nbr).astype(np.float32)
+    adj = np.full(dnbr.shape, np.nan, np.float32)
+    offsets = {}
+    for name, g in _groups(fuel0):
+        m = g & seen
+        if m.sum() < 1000:
+            continue
+        off = float(np.median(dnbr[m]))
+        offsets[name] = round(off, 4)
+        adj[m] = dnbr[m] - off
+    burnable = np.isfinite(adj)
+    new_scar = burnable & (adj > k["dnbr_ambang"])
     res = float(cfg["aoi"]["res"])
     new_scar = remove_small(new_scar, res, k.get("luas_min_ha", 1.0))
+    if scar_prev is not None:
+        new_scar &= ~scar_prev.astype(bool)
     scar = new_scar if scar_prev is None else (scar_prev.astype(bool) | new_scar)
+    ref_new = np.where(np.isfinite(nbr), nbr, nbr_ref).astype(np.float32)
     fuel = fuel0.copy()
-    info = dict(mode=mode, piksel_cerah_persen=round(100 * float(seen[grass].mean()) if grass.any() else 0, 1))
+    info = dict(mode=mode, metode=METODE,
+                piksel_cerah_persen=round(100 * float(seen[grass].mean()) if grass.any() else 0, 1),
+                koreksi_musiman_dnbr=offsets)
     if mode in ("batas", "kuantil"):
-        cls, b = classify(ndvi, grass & seen, mode, cfg)
-        upd = grass & seen
+        cls, b = classify(ndvi, grass & np.isfinite(ndvi), mode, cfg)
+        upd = grass & np.isfinite(ndvi)
         fuel[upd] = cls[upd]
         info["batas_ndvi"] = b
     fuel[scar] = int(k["kode_terbakar"])
@@ -119,7 +150,18 @@ def update(base_layers, nbr0, composite, cfg, scar_prev=None, mode=None):
     info["bekas_terbakar_baru_ha"] = round(float(new_scar.sum() * ha), 1)
     info["bekas_terbakar_musim_ha"] = round(float(scar.sum() * ha), 1)
     info["luas_fuel_ha"] = {str(int(v)): round(float(c * ha), 1) for v, c in zip(*np.unique(fuel, return_counts=True))}
-    return fuel, scar.astype(np.uint8), ndvi.astype(np.float32), dnbr.astype(np.float32), info
+    return fuel, scar.astype(np.uint8), ndvi.astype(np.float32), adj, ref_new, info
+
+
+def windows(start: dt.date, end: dt.date, days: int):
+    """Potong [start, end] menjadi jendela berurutan sepanjang `days` hari (yang terakhir bisa lebih pendek)."""
+    out = []
+    s = start
+    while s < end:
+        e = min(s + dt.timedelta(days=days), end)
+        out.append((s, e))
+        s = e
+    return out
 
 
 def preview_png(fuel, path, title=""):

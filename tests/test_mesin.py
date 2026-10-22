@@ -107,9 +107,10 @@ def test_update_mingguan_tandai_bekas_terbakar():
     nbr0 = np.full((n, n), 0.30, np.float32)
     b8 = np.full((n, n), 3000.0, np.float32)
     b4 = np.full((n, n), 1500.0, np.float32)
-    nbr_now = np.full((n, n), 0.30, np.float32)
-    nbr_now[20:30, 20:30] = 0.05                       # dNBR 0,25: terbakar (9 ha)
+    nbr_now = np.full((n, n), 0.18, np.float32)        # pengeringan musiman: dNBR 0,12 di mana-mana
+    nbr_now[20:30, 20:30] = -0.05                      # kebakaran: dNBR 0,35 (9 ha)
     b12 = b8 * (1 - nbr_now) / (1 + nbr_now)
-    f2, scar, ndvi, dnbr, info = L.update(lay, nbr0, dict(b04=b4, b08=b8, b12=b12), cfg)
+    f2, scar, ndvi, dnbr, ref, info = L.update(lay, nbr0, dict(b04=b4, b08=b8, b12=b12), cfg)
     assert (f2[20:30, 20:30] == 99).all() and f2[0, 10] == 31
     assert info["bekas_terbakar_baru_ha"] == pytest.approx(9.0)
+    assert ref[0, 10] == pytest.approx(0.18, abs=1e-4)   # acuan bergulir diperbarui

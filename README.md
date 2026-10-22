@@ -96,7 +96,12 @@ Workflow `Update landscape mingguan` berjalan tiap Senin 07:00 WITA. Bisa juga d
 
 1. Unduh GeoTIFF dasar dari Drive (di-cache di Actions).
 2. Cari Sentinel-2 L2A 21 hari terakhir (Planetary Computer, tanpa akun). Untuk tiap piksel, ambil pengamatan cerah paling baru (awan dan bayangan dimasking dengan SCL).
-3. dNBR = NBR awal kemarau − NBR terbaru. Piksel dengan dNBR > 0,10 (petak ≥ 1 ha) ditandai sebagai bekas terbakar. Bekas terbakar diakumulasi sejak awal musim (1 Juni) dan diberi fuel 99 (tidak terbakar lagi).
+3. Deteksi bekas terbakar dengan **dNBR bergulir**:
+   - dNBR = NBR acuan − NBR terbaru. NBR acuan adalah pengamatan cerah terakhir *sebelum* jendela ini, disimpan sebagai `nbr_acuan.tif` di Drive.
+   - Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok (rumput, hutan/semak).
+   - Piksel dengan dNBR terkoreksi > 0,10 (petak ≥ 1 ha) ditandai sebagai bekas terbakar.
+   - Bekas terbakar diakumulasi sejak awal musim (1 Juni) dan diberi fuel 99 (tidak terbakar lagi).
+   - Pada run pertama, atau dengan opsi *mulai ulang*, seluruh musim dihitung ulang per jendela 21 hari.
 4. Tulis `.lcp` 10 m, unggah ke Drive, dan catat ringkasan di `docs/status/`. Ringkasan ini tampil di GitHub Pages.
 
 Mode kelas (`config/tambora.toml`, `[mingguan] mode_kelas`):

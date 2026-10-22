@@ -8,6 +8,14 @@ on:
       tanggal:
         description: "Tanggal update (YYYY-MM-DD), kosong = hari ini"
         required: false
+      mulai_ulang:
+        description: "Hitung ulang bekas terbakar sejak awal musim (abaikan status lama)"
+        type: boolean
+        default: false
+      tanpa_unggah:
+        description: "Uji saja: jangan unggah ke Drive / jangan ubah status"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -43,7 +51,8 @@ jobs:
       - name: Update landscape
         run: |
           python -m tamborafire update-mingguan --kerja kerja --status docs/status/landscape_terbaru.json \
-            ${{ inputs.tanggal && format('--tanggal {0}', inputs.tanggal) || '' }}
+            ${{ inputs.tanggal && format('--tanggal {0}', inputs.tanggal) || '' }} \
+            ${{ inputs.mulai_ulang && '--mulai-ulang' || '' }} ${{ inputs.tanpa_unggah && '--tanpa-unggah' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: landscape-${{ github.run_number }}
@@ -51,8 +60,10 @@ jobs:
             kerja/hasil/ringkasan.json
             kerja/hasil/pratinjau_fuel.png
             kerja/hasil/fuel_model.tif
+            kerja/hasil/bekas_terbakar_musim.tif
           retention-days: 30
       - name: Catat status di repo
+        if: ${{ !inputs.tanpa_unggah }}
         run: |
           cp kerja/hasil/pratinjau_fuel.png docs/status/pratinjau_fuel.png
           git config user.name "github-actions[bot]"

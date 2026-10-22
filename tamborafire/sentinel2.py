@@ -29,9 +29,9 @@ def _bbox_ll(cfg):
     return [min(xs), min(ys), max(xs), max(ys)]
 
 
-def search(cfg, end: dt.date, days: int, source="planetary", max_cloud=70):
+def search(cfg, end: dt.date, days: int, source="planetary", max_cloud=70, start: dt.date | None = None):
     s = SRC[source]
-    start = end - dt.timedelta(days=days)
+    start = start or end - dt.timedelta(days=days)
     body = {"collections": [s["coll"]], "bbox": _bbox_ll(cfg), "limit": 200,
             "datetime": f"{start.isoformat()}T00:00:00Z/{end.isoformat()}T23:59:59Z",
             "query": {s["cloud"]: {"lt": max_cloud}}}
