@@ -85,7 +85,7 @@ Struktur folder di Drive (dibuat otomatis kecuali `dasar`):
   simulasi/     hasil dari workflow "Simulasi api"
 ```
 
-Langkah sekali saja:
+Panduan rinci langkah demi langkah (tanpa Python): [docs/PANDUAN_GOOGLE_DRIVE.md](docs/PANDUAN_GOOGLE_DRIVE.md). Ringkasnya:
 1. **Folder**: buat folder di Google Drive, misalnya `Simulasi API Tambora`. Salin ID-nya (bagian terakhir URL folder).
    - Buat subfolder `dasar` dan unggah isi `geotiff_junijuli2026_10m.zip` ke sana, bisa lewat browser.
 2. **Kunci akses**:
