@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulasi API Tambora</title>
+<style>
+:root{--bg:#f6f6f3;--fg:#1c1c1a;--muted:#686862;--card:#fff;--line:#dcdbd5;--accent:#1f6f5c}
+@media (prefers-color-scheme: dark){:root{--bg:#151514;--fg:#ebebe8;--muted:#a2a29b;--card:#1e1e1c;--line:#34342f;--accent:#5fbfa3}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 16px 64px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.sub{color:var(--muted);margin:0 0 20px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+a{color:var(--accent)}img{max-width:100%;border-radius:8px}table{border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+td,th{padding:4px 10px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}
+</style>
+</head>
+<body>
+<main>
+<h1>Simulasi API Tambora</h1>
+<p class="sub">Pendamping FlamMap/FARSITE untuk savana TN Tambora: landscape diperbarui tiap minggu dari Sentinel-2, fuel savana terkalibrasi (fmd20), dan cuaca per jam dari ERA5/ECMWF.</p>
+<section class="card">
+  <h2>Landscape terbaru</h2>
+  <div id="status">Memuat…</div>
+  <p><img id="prev" src="status/pratinjau_fuel.png" alt="Peta fuel model terbaru" onerror="this.remove()"></p>
+</section>
+<section class="card">
+  <h2>Alat</h2>
+  <ul>
+    <li><a href="pembuat_wxs.html">Pembuat file angin/cuaca .WXS</a> (ERA5 / ECMWF lewat Open-Meteo)</li>
+    <li>Jalankan simulasi dari tab <b>Actions → Simulasi api</b> di repo GitHub; hasil masuk ke Google Drive folder <code>simulasi/</code>.</li>
+  </ul>
+</section>
+</main>
+<script>
+fetch('status/landscape_terbaru.json',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+  var el=document.getElementById('status');
+  if(!d.tanggal){el.textContent=d.catatan||'Belum ada update.';return;}
+  var nama={30:'K1',31:'K2',32:'K3',33:'K4',99:'batu/bekas terbakar',161:'TU1',186:'TL6',91:'permukiman',93:'pertanian',98:'air',142:'SH2'};
+  var rows=Object.keys(d.luas_fuel_ha||{}).map(function(k){return '<tr><td>'+k+' '+(nama[k]||'')+'</td><td>'+d.luas_fuel_ha[k].toLocaleString('id-ID')+'</td></tr>'}).join('');
+  el.innerHTML='<p>Tanggal <b>'+d.tanggal+'</b> · mode kelas <b>'+d.mode+'</b> · '+(d.citra||[]).length+' citra · bekas terbakar baru <b>'+d.bekas_terbakar_baru_ha+' ha</b>, sejak '+d.awal_musim+' <b>'+d.bekas_terbakar_musim_ha+' ha</b></p><table><tr><th>Fuel model</th><th>ha</th></tr>'+rows+'</table>';
+}).catch(function(){document.getElementById('status').textContent='Belum ada update.';});
+</script>
+</body>
+</html>

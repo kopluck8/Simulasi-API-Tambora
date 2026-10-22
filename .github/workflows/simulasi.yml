@@ -1,0 +1,90 @@
+name: Simulasi api
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "mtt (angin tetap) atau farsite (cuaca per jam)"
+        type: choice
+        options: [farsite, mtt]
+        default: farsite
+      titik:
+        description: "Titik api 'lintang,bujur' (mis. -8.2585,118.1506)"
+        required: true
+        default: "-8.2585,118.1506"
+      mulai:
+        description: "FARSITE: waktu mulai WITA 'YYYY-MM-DD HH:MM'"
+        required: false
+        default: "2026-09-09 13:00"
+      jam:
+        description: "FARSITE: lama simulasi (jam)"
+        default: "24"
+      kecepatan:
+        description: "Angin 20-ft km/j (MTT wajib; FARSITE kosong = dari cuaca)"
+        required: false
+        default: ""
+      arah:
+        description: "Arah ASAL angin, derajat (MTT wajib; FARSITE kosong = dari cuaca)"
+        required: false
+        default: ""
+      menit:
+        description: "MTT: lama simulasi (menit)"
+        default: "480"
+      radius_km:
+        description: "Analysis Area (km dari titik api)"
+        default: "8"
+      res:
+        description: "Resolusi hitung (m): 10 = detail, 30 = cepat"
+        default: "10"
+      landscape:
+        description: "drive = landscape terbaru di Google Drive; contoh = landscape Piong 30 m di repo"
+        type: choice
+        options: [drive, contoh]
+        default: drive
+
+jobs:
+  simulasi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+      GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[serviceaccount]"
+      - name: Ambil landscape
+        id: ls
+        run: |
+          if [ "${{ inputs.landscape }}" = "drive" ]; then
+            python -m tamborafire ambil-landscape --out kerja/terbaru
+            echo "lcp=kerja/terbaru/landscape_terbaru_10m.lcp" >> "$GITHUB_OUTPUT"
+          else
+            echo "lcp=contoh/piong_9sep/landscape_prakebakaran_9sep_30m.lcp" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Jalankan
+        run: |
+          OUT="kerja/simulasi/$(date -u +%Y%m%d_%H%M)_${{ inputs.mode }}"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+          ARGS="--lcp ${{ steps.ls.outputs.lcp }} --latlon=${{ inputs.titik }} --buffer 30 --radius-km ${{ inputs.radius_km }} --res ${{ inputs.res }} --out $OUT"
+          if [ "${{ inputs.mode }}" = "mtt" ]; then
+            python -m tamborafire mtt $ARGS --kecepatan "${{ inputs.kecepatan }}" --arah "${{ inputs.arah }}" --menit ${{ inputs.menit }}
+          else
+            EXTRA=""
+            [ -n "${{ inputs.kecepatan }}" ] && EXTRA="$EXTRA --kecepatan ${{ inputs.kecepatan }}"
+            [ -n "${{ inputs.arah }}" ] && EXTRA="$EXTRA --arah ${{ inputs.arah }}"
+            python -m tamborafire farsite $ARGS --mulai "${{ inputs.mulai }}" --jam ${{ inputs.jam }} $EXTRA
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulasi-${{ github.run_number }}
+          path: ${{ env.OUT }}
+      - name: Simpan ke Google Drive
+        if: env.GDRIVE_FOLDER_ID != ''
+        run: python -m tamborafire unggah "$OUT" --ke "simulasi/$(basename $OUT)"

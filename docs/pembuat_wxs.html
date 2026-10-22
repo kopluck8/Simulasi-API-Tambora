@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pembuat WXS</title>
+<style>
+:root{--bg:#f6f6f3;--fg:#1c1c1a;--muted:#686862;--card:#ffffff;--line:#dcdbd5;--accent:#1f6f5c;--accent-fg:#fff;--warn:#8a5300;--warn-bg:#fff4e0;--err:#b3261e;--err-bg:#fdecea;--code:#f0efea}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ebebe8;--muted:#a2a29b;--card:#1e1e1c;--line:#34342f;--accent:#5fbfa3;--accent-fg:#0e1f1a;--warn:#e7a849;--warn-bg:#2d2414;--err:#f2867d;--err-bg:#2e1716;--code:#262624}}
+:root[data-theme="dark"]{--bg:#151514;--fg:#ebebe8;--muted:#a2a29b;--card:#1e1e1c;--line:#34342f;--accent:#5fbfa3;--accent-fg:#0e1f1a;--warn:#e7a849;--warn-bg:#2d2414;--err:#f2867d;--err-bg:#2e1716;--code:#262624}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:16px;margin:0 0 12px}
+p.sub{color:var(--muted);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);font:inherit}
+textarea{font-family:ui-monospace,Consolas,monospace;font-size:12px;min-height:90px}
+.check{display:flex;gap:8px;align-items:flex-start;margin-top:12px}
+.check input{width:auto;margin-top:4px}
+.check label{color:var(--fg);font-size:14px;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{border:0;border-radius:7px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-fg)}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.msg{padding:10px 12px;border-radius:7px;margin-top:12px;font-size:14px;display:none}
+.msg.err{display:block;background:var(--err-bg);color:var(--err)}
+.msg.warn{display:block;background:var(--warn-bg);color:var(--warn)}
+.msg.ok{display:block;background:var(--code)}
+.url{word-break:break-all;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
+.url a{color:var(--accent)}
+pre{background:var(--code);border-radius:7px;padding:12px;overflow:auto;font-size:12px;max-height:420px;margin:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:10px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600}
+.arrow{display:inline-block;width:14px;text-align:center}
+ul.notes{margin:0;padding-left:18px;color:var(--muted);font-size:14px}
+ul.notes li{margin-bottom:6px}
+details summary{cursor:pointer;color:var(--accent);font-weight:600}
+#out{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Pembuat file angin/cuaca .WXS</h1>
+<p class="sub">Mengunduh data cuaca per jam (reanalisis ERA5 / ECMWF IFS lewat Open-Meteo) lalu mengubahnya ke format Weather Stream (.wxs) FARSITE/FlamMap, satuan Metric. Bawaan: hotspot VIIRS Piong (savana, ±270 m dpl), 9 September 2026, waktu WITA. Koordinat 118,00 BT adalah puncak/kaldera (±1.300 m), jangan dipakai untuk savana.</p>
+
+<section class="card">
+  <h2>1. Lokasi dan tanggal</h2>
+  <div class="grid">
+    <div><label for="name">Nama lokasi (untuk nama file)</label><input id="name" value="Piong_hotspot"></div>
+    <div><label for="lat">Lintang (desimal, selatan = minus)</label><input id="lat" type="number" step="0.0001" value="-8.2585"></div>
+    <div><label for="lon">Bujur (desimal)</label><input id="lon" type="number" step="0.0001" value="118.1506"></div>
+    <div><label for="target">Tanggal sasaran</label><input id="target" type="date" value="2026-09-09"></div>
+    <div><label for="endd">Sampai tanggal</label><input id="endd" type="date" value="2026-09-09"></div>
+    <div><label for="tz">Zona waktu jam di file</label>
+      <select id="tz"><option value="Asia/Makassar" selected>WITA (UTC+8)</option><option value="Asia/Jakarta">WIB (UTC+7)</option><option value="Asia/Jayapura">WIT (UTC+9)</option><option value="GMT">UTC</option></select></div>
+    <div><label for="model">Model data</label>
+      <select id="model">
+        <option value="best_match" selected>Otomatis (pilihan Open-Meteo)</option>
+        <option value="ecmwf_ifs">ECMWF IFS ~9 km</option>
+        <option value="era5_land">ERA5-Land ~9 km</option>
+        <option value="era5">ERA5 ~25 km</option>
+      </select></div>
+    <div><label for="elev">Elevasi titik, m (kosongkan = otomatis dari DEM)</label><input id="elev" type="number" step="1" placeholder="otomatis"></div>
+  </div>
+  <div class="check"><input id="cond" type="checkbox" checked><label for="cond">Tambahkan 3 hari sebelum tanggal sasaran untuk pengkondisian kadar air bahan bakar (disarankan untuk FARSITE: periode pengkondisian dimulai ≥3 hari sebelum periode bakar pertama).</label></div>
+  <div class="check"><input id="compat" type="checkbox"><label for="compat"><b>Mode kompatibilitas FlamMap (eksperimental). Biarkan MATI bila format tanggal pendek Windows sudah M/D/YYYY</b> (Settings → Time &amp; language → Language &amp; region → Regional format). Dengan format itu FlamMap membaca tanggal biasa dengan benar, dan mode ini justru membuat tanggal salah sehingga conditioning gagal dan ROS nol. Pakai hanya kalau format Windows bukan M/D/YYYY, file biasa memunculkan error "exceed 3 hours span", dan kolom Date di Edit WXS menampilkan tanggal yang salah, misalnya 06/26/09 untuk 6 Sep 2026. Kolom Year/Mth/Day sengaja ditulis tertukar agar FlamMap di komputer tersebut membacanya sebagai tanggal yang benar. File ini tidak standar: jangan dipakai di komputer lain atau setelah pengaturan tanggal FlamMap normal.</label></div>
+  <div class="row">
+    <button id="go">Ambil data &amp; buat WXS</button>
+  </div>
+  <div id="urlbox" class="url" style="margin-top:10px"></div>
+  <div id="msg" class="msg"></div>
+  <details style="margin-top:14px">
+    <summary>Tombol gagal? Pakai cara tempel manual</summary>
+    <p style="font-size:14px;color:var(--muted)">Buka tautan URL di atas pada tab baru, pilih semua teks (Ctrl+A), salin, lalu tempel di sini.</p>
+    <textarea id="paste" placeholder='{"latitude":-8.25, ... "hourly":{...}}'></textarea>
+    <div class="row"><button class="ghost" id="conv">Ubah teks tempelan ke WXS</button></div>
+  </details>
+</section>
+
+<section class="card" id="out">
+  <h2>2. Ringkasan angin pada tanggal sasaran</h2>
+  <div class="stats" id="stats"></div>
+  <div class="tw"><table id="tbl"></table></div>
+</section>
+
+<section class="card" id="out2" style="display:none">
+  <h2>3. File .wxs</h2>
+  <div class="row" style="margin:0 0 12px"><button id="dl">Unduh .wxs</button><button class="ghost" id="cp">Salin teks</button></div>
+  <pre id="wxs"></pre>
+</section>
+
+<section class="card">
+  <h2>Catatan pemakaian</h2>
+  <ul class="notes">
+    <li>Ini data model (reanalisis/analisis grid), bukan pengamatan stasiun. Satu sel grid 9–25 km meratakan pengaruh lereng, punggungan, dan kaldera, jadi angin lokal di Tambora bisa jauh berbeda. Untuk angin yang mengikuti topografi, jalankan WindNinja dengan kecepatan/arah dari file ini sebagai input domain-average.</li>
+    <li>Kolom: Year Mth Day Time Temp(°C) RH(%) HrlyPcp(mm) WindSpd(km/j pada 10 m) WindDir(° asal angin, searah jarum jam dari utara) CloudCov(%). Semua bilangan bulat kecuali curah hujan; RH dibatasi maksimal 99.</li>
+    <li>Ganti koordinat dengan titik api/hotspot yang Anda modelkan. RAWS_ELEVATION diisi elevasi titik yang dipakai Open-Meteo; suhu sudah dikoreksi ke elevasi itu.</li>
+    <li>Data ERA5 tersedia dengan jeda sekitar 5 hari; ECMWF IFS kadang punya jeda berbeda. Kalau satu model kosong, coba model lain dan bandingkan.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+(function(){
+  var API = 'https://archive-api.open-meteo.com/v1/archive';
+  var VARS = ['temperature_2m','relative_humidity_2m','precipitation','wind_speed_10m','wind_direction_10m','cloud_cover'];
+  var $ = function(id){ return document.getElementById(id); };
+  var lastText = '', lastName = 'cuaca.wxs';
+
+  function addDays(iso, n){ var d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+  function params(){
+    var target = $('target').value, end = $('endd').value || target;
+    if (end < target) end = target;
+    return { name: $('name').value.trim() || 'lokasi', lat: $('lat').value, lon: $('lon').value,
+      target: target, start: $('cond').checked ? addDays(target, -3) : target, end: end,
+      tz: $('tz').value, model: $('model').value, elev: $('elev').value.trim(), compat: $('compat').checked };
+  }
+  function buildUrl(p){
+    var q = new URLSearchParams({ latitude: p.lat, longitude: p.lon, start_date: p.start, end_date: p.end,
+      hourly: VARS.join(','), timezone: p.tz, wind_speed_unit: 'kmh', temperature_unit: 'celsius', precipitation_unit: 'mm' });
+    if (p.model && p.model !== 'best_match') q.set('models', p.model);
+    if (p.elev !== '') q.set('elevation', p.elev);
+    return API + '?' + q.toString();
+  }
+  function showUrl(){
+    var u = buildUrl(params());
+    $('urlbox').innerHTML = 'URL data: <a target="_blank" rel="noopener"></a>';
+    var a = $('urlbox').querySelector('a'); a.href = u; a.textContent = u;
+  }
+  function msg(kind, html){ var m = $('msg'); m.className = 'msg ' + (kind || ''); m.innerHTML = html || ''; }
+  function pick(h, v){
+    if (h[v]) return h[v];
+    var k = Object.keys(h).filter(function(x){ return x.indexOf(v + '_') === 0; })[0];
+    return k ? h[k] : null;
+  }
+  function pad(v, n){ return String(v).padStart(n); }
+  var DIRS = ['U','TL','T','TG','S','BD','B','BL'];
+  var DIRN = ['Utara','Timur laut','Timur','Tenggara','Selatan','Barat daya','Barat','Barat laut'];
+  function compass(d){ return Math.round(((d % 360) + 360) % 360 / 45) % 8; }
+
+  function convert(data, p){
+    if (data && data.error) throw new Error('Open-Meteo menolak permintaan: ' + (data.reason || 'tanpa alasan'));
+    var h = data && data.hourly;
+    if (!h || !h.time) throw new Error('Respons tidak berisi data per jam (hourly).');
+    var cols = {};
+    VARS.forEach(function(v){ cols[v] = pick(h, v); if (!cols[v]) throw new Error('Variabel ' + v + ' tidak ada di respons.'); });
+    var elev = p.elev !== '' ? Math.round(+p.elev) : Math.round(data.elevation);
+    var rows = [], missing = [];
+    for (var i = 0; i < h.time.length; i++){
+      var t = h.time[i], vals = VARS.map(function(v){ return cols[v][i]; });
+      if (vals.some(function(x){ return x === null || x === undefined || Number.isNaN(x); })) { missing.push(t); continue; }
+      var y = +t.slice(0,4), mo = +t.slice(5,7), d = +t.slice(8,10), hh = +t.slice(11,13), mi = +t.slice(14,16);
+      rows.push({ iso: t, date: t.slice(0,10), y: y, mo: mo, d: d, time: hh*100 + mi,
+        temp: Math.round(vals[0]), rh: Math.max(0, Math.min(99, Math.round(vals[1]))),
+        pcp: Math.max(0, vals[2]), ws: Math.round(vals[3]), wsRaw: vals[3], wd: Math.round(vals[4]) % 361,
+        cc: Math.max(0, Math.min(100, Math.round(vals[5]))) });
+    }
+    if (!rows.length) throw new Error('Semua nilai kosong untuk rentang tanggal ini. Data model ini mungkin belum tersedia; coba model lain.');
+    var lines = ['RAWS_ELEVATION: ' + elev, 'RAWS_UNITS: Metric', 'RAWS: ' + rows.length,
+      'Year  Mth  Day  Time  Temp   RH  HrlyPcp  WindSpd  WindDir  CloudCov'];
+    rows.forEach(function(r){
+      // Mode kompatibilitas: FlamMap (pada komputer bermasalah) menyusun "Mth/Day/YY" lalu membacanya sebagai "YY/MM/DD".
+      // Agar hasil bacaannya = tanggal asli, tulis Year = 2000+hari, Mth = tahun 2 digit, Day = bulan.
+      var cy = p.compat ? 2000 + r.d : r.y, cm = p.compat ? r.y % 100 : r.mo, cd = p.compat ? r.mo : r.d;
+      lines.push([pad(cy,4), pad(cm,4), pad(cd,4), pad(String(r.time).padStart(4,'0'),5), pad(r.temp,5), pad(r.rh,4), pad(r.pcp.toFixed(2),8), pad(r.ws,8), pad(r.wd,8), pad(r.cc,9)].join(' '));
+    });
+    return { text: lines.join('\r\n') + '\r\n', rows: rows, missing: missing, elev: elev, data: data };
+  }
+
+  function render(res, p){
+    lastText = res.text;
+    lastName = (p.name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') || 'lokasi') + '_' + res.rows[0].date.replace(/-/g,'') + '_' + res.rows[res.rows.length-1].date.replace(/-/g,'') + (p.compat ? '_flammap_kompat' : '') + '.wxs';
+    $('wxs').textContent = res.text;
+    var day = res.rows.filter(function(r){ return r.date >= p.target; });
+    if (!day.length) day = res.rows;
+    var mx = day.reduce(function(a,b){ return b.wsRaw > a.wsRaw ? b : a; });
+    var mean = day.reduce(function(s,r){ return s + r.wsRaw; }, 0) / day.length;
+    var u = 0, v = 0; day.forEach(function(r){ var rad = r.wd * Math.PI/180; u += r.wsRaw*Math.sin(rad); v += r.wsRaw*Math.cos(rad); });
+    var dom = (Math.atan2(u, v) * 180/Math.PI + 360) % 360;
+    var tmin = Math.min.apply(null, day.map(function(r){ return r.temp; })), tmax = Math.max.apply(null, day.map(function(r){ return r.temp; }));
+    var rhmin = Math.min.apply(null, day.map(function(r){ return r.rh; }));
+    var rain = day.reduce(function(s,r){ return s + r.pcp; }, 0);
+    var hm = function(t){ return String(Math.floor(t/100)).padStart(2,'0') + ':' + String(t%100).padStart(2,'0'); };
+    var tzLabel = $('tz').options[$('tz').selectedIndex].text.split(' ')[0];
+    var stats = [
+      [mean.toFixed(1) + ' km/j', 'Kecepatan rata-rata'],
+      [mx.ws + ' km/j', 'Maksimum, pukul ' + hm(mx.time) + ' ' + tzLabel],
+      [DIRS[compass(dom)] + ' (' + Math.round(dom) + '°)', 'Arah dominan (asal angin): ' + DIRN[compass(dom)]],
+      [tmin + '–' + tmax + ' °C', 'Suhu min–maks'],
+      [rhmin + ' %', 'RH minimum'],
+      [rain.toFixed(1) + ' mm', 'Total hujan']
+    ];
+    $('stats').innerHTML = stats.map(function(s){ return '<div class="stat"><b>' + s[0] + '</b><span>' + s[1] + '</span></div>'; }).join('');
+    var head = '<tr><th>Tanggal jam (' + tzLabel + ')</th><th>Angin km/j</th><th>Arah °</th><th></th><th>Suhu °C</th><th>RH %</th><th>Hujan mm</th><th>Awan %</th></tr>';
+    $('tbl').innerHTML = head + day.map(function(r){
+      return '<tr><td>' + r.date + ' ' + hm(r.time) + '</td><td>' + r.ws + '</td><td>' + r.wd + '</td><td><span class="arrow" style="transform:rotate(' + ((r.wd + 180) % 360) + 'deg)">↑</span> ' + DIRS[compass(r.wd)] + '</td><td>' + r.temp + '</td><td>' + r.rh + '</td><td>' + r.pcp.toFixed(1) + '</td><td>' + r.cc + '</td></tr>';
+    }).join('');
+    $('out').style.display = 'block'; $('out2').style.display = 'block';
+    var d = res.data;
+    var info = 'Selesai: ' + res.rows.length + ' jam data. Titik grid yang dipakai: ' + (+d.latitude).toFixed(3) + ', ' + (+d.longitude).toFixed(3) + '; elevasi ' + res.elev + ' m; zona waktu ' + (d.timezone || p.tz) + '.';
+    if (p.compat) {
+      var f = res.rows[0], two = function(n){ return String(n).padStart(2,'0'); };
+      info += '<br><b>Mode kompatibilitas aktif.</b> Cek di FlamMap (Edit WXS): baris 1 kolom Date harus tampil <b>' + two(f.mo) + '/' + two(f.d) + '/' + two(f.y % 100) + ' ' + hm(f.time) + '</b>, dan tidak boleh ada error. Kalau tampil lain atau FlamMap menolak file, jangan dipakai.';
+      msg('warn', info + (res.missing.length ? '<br>Peringatan: ' + res.missing.length + ' jam kosong tidak dimasukkan.' : ''));
+    } else if (res.missing.length) msg('warn', info + '<br>Peringatan: ' + res.missing.length + ' jam kosong dan tidak dimasukkan (' + res.missing.slice(0,4).join(', ') + (res.missing.length > 4 ? ', …' : '') + '). FARSITE butuh deret per jam yang utuh, jadi coba model lain.');
+    else msg('ok', info);
+  }
+
+  async function go(){
+    var p = params(), url = buildUrl(p);
+    showUrl(); msg('ok', 'Mengunduh data…'); $('go').disabled = true;
+    try {
+      var r = await fetch(url);
+      var data = await r.json().catch(function(){ throw new Error('Respons bukan JSON (HTTP ' + r.status + ').'); });
+      render(convert(data, p), p);
+    } catch (e) {
+      msg('err', 'Gagal: ' + (e && e.message ? e.message : e) + '<br>Kalau ini masalah koneksi, buka URL di atas di tab baru lalu pakai "cara tempel manual".');
+    } finally { $('go').disabled = false; }
+  }
+
+  $('go').addEventListener('click', go);
+  $('conv').addEventListener('click', function(){
+    var p = params();
+    try { render(convert(JSON.parse($('paste').value), p), p); }
+    catch (e) { msg('err', 'Gagal membaca teks tempelan: ' + e.message); }
+  });
+  $('dl').addEventListener('click', function(){
+    var blob = new Blob([lastText], { type: 'text/plain' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = lastName;
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+  $('cp').addEventListener('click', function(){
+    navigator.clipboard.writeText(lastText).then(function(){ $('cp').textContent = 'Tersalin'; setTimeout(function(){ $('cp').textContent = 'Salin teks'; }, 1500); });
+  });
+  ['lat','lon','target','endd','tz','model','elev','cond','compat'].forEach(function(id){ $(id).addEventListener('change', showUrl); });
+  showUrl();
+})();
+</script>
+</body>
+</html>

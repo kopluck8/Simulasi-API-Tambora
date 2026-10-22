@@ -1,0 +1,6 @@
+__pycache__/
+*.egg-info/
+kerja/
+hasil/
+*.pyc
+.pytest_cache/

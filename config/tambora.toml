@@ -1,0 +1,57 @@
+# Konfigurasi Simulasi API Tambora. Ubah di sini, bukan di kode.
+
+[aoi]
+epsg = 32750                 # UTM 50S
+west = 584000
+south = 9068000
+east = 632000
+north = 9106000
+res = 10                     # meter, sejajar grid Sentinel-2
+latitude = -8
+
+[kalibrasi]
+fmd = "kalibrasi/tambora_savana_cepat20.fmd"   # savana K1-K4 hasil kalibrasi (fmd20)
+fms = "kalibrasi/tambora_latihan.fms"
+ros_adjust = {}                                # contoh: { 30 = 1.0, 31 = 1.0 }
+
+[drive]
+# ID folder induk di Google Drive (bagian terakhir URL folder). Bisa juga diisi lewat secret GDRIVE_FOLDER_ID.
+folder_id = ""
+dasar = "dasar"                    # GeoTIFF dasar (topografi, kanopi, fuel awal kemarau)
+landscape = "landscape"            # hasil mingguan: landscape/terbaru dan landscape/arsip/<tanggal>
+simulasi = "simulasi"              # hasil simulasi dari GitHub Actions
+
+[dasar]
+# Nama file GeoTIFF dasar di folder Drive 'dasar' (sama dengan isi geotiff_junijuli2026_10m.zip)
+elev = "elevasi_m.tif"
+slope = "lereng_derajat.tif"
+aspect = "aspek_derajat.tif"
+fuel = "fuel_model.tif"
+cover = "tutupan_kanopi_persen.tif"
+height = "tinggi_kanopi_m_x10.tif"
+cbh = "cbh_m_x10.tif"
+cbd = "cbd_kgm3_x100.tif"
+s2_median = "s2_median_junijuli_2026_B2B3B4B8B11B12.tif"  # untuk NBR pra-kebakaran
+nbr = "nbr_dasar_x10000.tif"                               # dibuat otomatis dari s2_median bila belum ada
+
+[mingguan]
+stac = "planetary"            # "planetary" (Microsoft Planetary Computer) atau "earthsearch" (AWS)
+hari = 21                     # jendela citra ke belakang dari tanggal update
+awan_maks = 70                # % awan per citra
+mode_kelas = "dasar"          # "dasar": K1-K4 tetap dari awal kemarau, hanya bekas terbakar diperbarui
+                              # "batas": K1-K4 dihitung ulang dari NDVI terbaru dengan batas tetap di bawah
+                              # "kuantil": K1-K4 dari kuantil NDVI terbaru dengan proporsi tetap di bawah
+batas_ndvi = [0.317, 0.593, 0.781]
+proporsi = [0.033, 0.430, 0.418, 0.118]
+dnbr_ambang = 0.10            # bekas terbakar baru bila dNBR > ambang
+ndvi_rumput_min = 0.0         # piksel batu/pasir dengan NDVI dasar >= 0,2 sudah dihitung rumput di peta dasar
+kode_terbakar = 99            # fuel untuk bekas terbakar musim ini (99 = NB9, tidak terbakar lagi)
+awal_musim = "06-01"          # bekas terbakar diakumulasi sejak tanggal ini setiap tahun
+luas_min_ha = 1.0             # abaikan petak bekas terbakar lebih kecil dari ini
+
+[simulasi]
+angin = "otomatis"            # "otomatis" (WindNinja bila ada, kalau tidak model medan), "medan", "windninja", "seragam"
+windninja_mesh = 100          # m
+burn_period = [0, 24]
+zona = "WITA"
+model_cuaca = "best_match"
