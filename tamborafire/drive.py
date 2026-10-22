@@ -54,6 +54,21 @@ class Drive:
         self._token, self._exp = d["access_token"], time.time() + int(d.get("expires_in", 3600))
         return self._token
 
+    @staticmethod
+    def _check(r):
+        if r.status_code >= 400:
+            try:
+                msg = r.json().get("error", {}).get("message", r.text)
+            except ValueError:
+                msg = r.text
+            raise RuntimeError(f"Google Drive {r.status_code} ({r.request.method} {r.url.split('?')[0]}): {msg}")
+        return r
+
+    def info(self, file_id):
+        r = requests.get(f"{API}/files/{file_id}", headers=self._h(), timeout=60,
+                         params=dict(fields="id,name,mimeType,capabilities(canAddChildren)", supportsAllDrives="true"))
+        return self._check(r).json()
+
     def _h(self):
         return {"Authorization": "Bearer " + self.token()}
 
@@ -65,7 +80,7 @@ class Drive:
         r = requests.get(API + "/files", headers=self._h(), timeout=60,
                          params=dict(q=q, fields="files(id,name,mimeType,size,modifiedTime,md5Checksum)",
                                      supportsAllDrives="true", includeItemsFromAllDrives="true"))
-        r.raise_for_status()
+        self._check(r)
         f = r.json()["files"]
         return f[0] if f else None
 
@@ -78,7 +93,7 @@ class Drive:
             if page:
                 p["pageToken"] = page
             r = requests.get(API + "/files", headers=self._h(), params=p, timeout=60)
-            r.raise_for_status()
+            self._check(r)
             d = r.json()
             out += d["files"]
             page = d.get("nextPageToken")
@@ -91,7 +106,7 @@ class Drive:
             return f["id"]
         r = requests.post(API + "/files", headers=self._h(), params=dict(supportsAllDrives="true"), timeout=60,
                           json=dict(name=name, mimeType=FOLDER, parents=[parent]))
-        r.raise_for_status()
+        self._check(r)
         return r.json()["id"]
 
     def path(self, parts, root):
@@ -118,7 +133,7 @@ class Drive:
         url = (f"{UPLOAD}/{old['id']}" if old else UPLOAD) + "?uploadType=resumable&supportsAllDrives=true"
         r = requests.request("PATCH" if old else "POST", url, timeout=60,
                              headers={**self._h(), "X-Upload-Content-Length": str(size)}, json=meta)
-        r.raise_for_status()
+        self._check(r)
         loc = r.headers["Location"]
         chunk = 32 * 1024 * 1024
         with open(src, "rb") as f:
@@ -132,7 +147,7 @@ class Drive:
                 if rr.status_code in (200, 201):
                     return rr.json()["id"]
                 if rr.status_code != 308:
-                    rr.raise_for_status()
+                    self._check(rr)
                 pos = end + 1
 
     def sync_down(self, folder_id, dest, names=None):

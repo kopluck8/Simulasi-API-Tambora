@@ -204,9 +204,16 @@ def cmd_update(args, cfg):
     if not args.tanpa_drive:
         from .drive import Drive
         drive = Drive()
-        root = cfg["drive"]["folder_id"]
+        root = cfg["drive"]["folder_id"].strip()
         if not root:
             sys.exit("Isi drive.folder_id di config/tambora.toml atau secret GDRIVE_FOLDER_ID.")
+        try:
+            inf = drive.info(root)
+        except RuntimeError as e:
+            sys.exit(f"Folder induk Drive tidak bisa dibuka (cek GDRIVE_FOLDER_ID): {e}")
+        print(f"Folder Drive: {inf['name']}  (boleh menulis: {inf.get('capabilities', {}).get('canAddChildren')})")
+        isi = [f["name"] for f in drive.ls(root)]
+        print("Isi folder induk:", ", ".join(isi) or "(kosong)")
         fid_dasar = drive.path(cfg["drive"]["dasar"], root)
         if not args.lokal_dasar:
             need = [cfg["dasar"][k] for k in L.LAYER_KEYS] + [cfg["dasar"]["nbr"]]
