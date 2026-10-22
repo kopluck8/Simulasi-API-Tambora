@@ -18,7 +18,8 @@ SRC = {
     "earthsearch": dict(url="https://earth-search.aws.element84.com/v1/search", coll="sentinel-2-l2a",
                         bands=dict(b04="red", b08="nir", b12="swir22", scl="scl"), cloud="eo:cloud_cover"),
 }
-CLEAR_SCL = {4, 5, 6, 7, 11}   # vegetasi, tanah, air, unclassified, salju; tolak awan/bayangan/cirrus
+CLEAR_SCL = {4, 5, 6}          # vegetasi, tanah, air; tolak awan/bayangan/cirrus/unclassified
+CLOUD_SCL = {3, 8, 9, 10}      # bayangan, awan sedang/tebal, cirrus (diperlebar 3 piksel)
 
 
 def _bbox_ll(cfg):
@@ -108,3 +109,53 @@ def latest_clear_composite(cfg, items, source="planetary", log=print):
     if comp is None:
         raise RuntimeError("Tidak ada citra cerah di jendela waktu ini.")
     return comp, used
+
+
+def median_composite(cfg, items, source="planetary", slots=6, log=print):
+    """Median NDVI dan NBR dari semua pengamatan cerah dalam jendela (maks. `slots` terakhir per piksel).
+    Lebih tahan derau, sisa awan, dan bayangan dibanding satu pengamatan. Mengembalikan dict
+    ndvi, nbr (NaN bila < 1 pengamatan), n (jumlah pengamatan cerah) dan daftar citra."""
+    from scipy.ndimage import binary_dilation
+    s = SRC[source]
+    st = None
+    used = []
+    for f in items:
+        assets = f["assets"]
+        try:
+            scl = _read_to_grid(_sign(assets[s["bands"]["scl"]]["href"], source), cfg, "nearest").astype(np.int16)
+            clear = np.isin(scl, list(CLEAR_SCL))
+            if clear.sum() == 0:
+                continue
+            clear &= ~binary_dilation(np.isin(scl, list(CLOUD_SCL)), iterations=3)
+            b = {k: _read_to_grid(_sign(assets[v]["href"], source), cfg, "nearest" if k == "b12" else "bilinear")
+                 for k, v in s["bands"].items() if k != "scl"}
+        except Exception as e:
+            log(f"lewati {f['id']}: {e}")
+            continue
+        ok = clear & (b["b08"] > 0) & (b["b04"] > 0) & (b["b12"] > 0)
+        if not ok.any():
+            continue
+        if st is None:
+            st = dict(ndvi=np.full((slots,) + scl.shape, np.nan, np.float32),
+                      nbr=np.full((slots,) + scl.shape, np.nan, np.float32),
+                      n=np.zeros(scl.shape, np.int16))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            ndvi = (b["b08"] - b["b04"]) / (b["b08"] + b["b04"])
+            nbr = (b["b08"] - b["b12"]) / (b["b08"] + b["b12"])
+        slot = st["n"] % slots
+        for name, val in (("ndvi", ndvi), ("nbr", nbr)):
+            arr = st[name]
+            for k in range(slots):
+                m = ok & (slot == k)
+                arr[k][m] = val[m]
+        st["n"][ok] += 1
+        used.append(f["id"])
+        log(f"pakai {f['id']} ({ok.mean() * 100:.0f}% AOI cerah)")
+    if st is None:
+        raise RuntimeError("Tidak ada citra cerah di jendela waktu ini.")
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        out = dict(ndvi=np.nanmedian(st["ndvi"], axis=0).astype(np.float32),
+                   nbr=np.nanmedian(st["nbr"], axis=0).astype(np.float32), n=st["n"])
+    return out, used

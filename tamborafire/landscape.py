@@ -89,7 +89,7 @@ def remove_small(mask, res, min_ha):
     return keep[lab]
 
 
-METODE = "dnbr-bergulir-v2"
+METODE = "dnbr-median-bergulir-v3"
 
 
 def _groups(fuel0):
@@ -107,16 +107,23 @@ def update(base_layers, nbr_ref, composite, cfg, scar_prev=None, mode=None):
     Sisa pengeringan musiman dikoreksi dengan mengurangkan median dNBR tiap kelompok fuel
     (dNBR offset, Parks dkk. 2014), lalu ambang dNBR_terkoreksi > dnbr_ambang.
 
-    composite: dict b04,b08,b12 (DN mentah, NaN = tidak cerah).
+    composite: dict ndvi, nbr (median jendela, DN mentah), n (jumlah pengamatan cerah),
+    atau dict b04,b08,b12 (satu pengamatan; dipakai di tes).
     Mengembalikan (fuel, bekas_terbakar_musim, ndvi, dnbr_terkoreksi, nbr_ref_baru, ringkasan)."""
     k = cfg["mingguan"]
     mode = mode or k["mode_kelas"]
     fuel0 = base_layers["fuel"].astype(np.int16)
     grass = (fuel0 >= 30) & (fuel0 <= 33)
-    b4, b8, b12 = composite["b04"], composite["b08"], composite["b12"]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        ndvi = (b8 - b4) / (b8 + b4)
-        nbr = (b8 - b12) / (b8 + b12)
+    if "nbr" in composite:
+        ndvi, nbr = composite["ndvi"], composite["nbr"].copy()
+        nmin = int(k.get("pengamatan_min", 2))
+        if "n" in composite:
+            nbr[composite["n"] < nmin] = np.nan
+    else:
+        b4, b8, b12 = composite["b04"], composite["b08"], composite["b12"]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            ndvi = (b8 - b4) / (b8 + b4)
+            nbr = (b8 - b12) / (b8 + b12)
     seen = np.isfinite(ndvi) & np.isfinite(nbr) & np.isfinite(nbr_ref)
     dnbr = (nbr_ref - nbr).astype(np.float32)
     adj = np.full(dnbr.shape, np.nan, np.float32)

@@ -263,6 +263,12 @@ def cmd_update(args, cfg):
         wins = L.windows(last, tgl, max(int(k["hari"]), (tgl - last).days)) or [(last, tgl)]
     scar = scar_prev
     used_all, per = [], []
+    ref_mask = None
+    p_val = _rel(k.get("validasi_bekas", ""))
+    if k.get("validasi_bekas") and os.path.exists(p_val):
+        from .geo import read_polygons
+        from rasterio.features import rasterize as _rz
+        ref_mask = _rz([(read_polygons(p_val), 1)], out_shape=lay["fuel"].shape, transform=tr).astype(bool)
     fuel = lay["fuel"].copy()
     info = {}
     for w0, w1 in wins:
@@ -271,7 +277,7 @@ def cmd_update(args, cfg):
         if not items:
             continue
         try:
-            comp, used = S2.latest_clear_composite(cfg, items, k["stac"])
+            comp, used = S2.median_composite(cfg, items, k["stac"])
         except RuntimeError as e:
             print(" ", e)
             continue
@@ -279,7 +285,12 @@ def cmd_update(args, cfg):
         used_all += used
         per.append(dict(jendela=f"{w0}/{w1}", citra=len(used), baru_ha=info["bekas_terbakar_baru_ha"],
                         koreksi=info["koreksi_musiman_dnbr"]))
-        print(f"   bekas terbakar baru {info['bekas_terbakar_baru_ha']} ha, koreksi musiman {info['koreksi_musiman_dnbr']}")
+        msg = f"   bekas terbakar baru {info['bekas_terbakar_baru_ha']} ha, koreksi musiman {info['koreksi_musiman_dnbr']}"
+        if ref_mask is not None and ref_mask.any():
+            hit = scar.astype(bool) & ref_mask
+            msg += f"; bekas 9 Sep tertandai {100 * hit.sum() / ref_mask.sum():.0f}%"
+            per[-1]["validasi_9sep_persen"] = round(100 * float(hit.sum() / ref_mask.sum()), 1)
+        print(msg)
     if scar is None:
         sys.exit("Tidak ada citra cerah sama sekali; landscape tidak diperbarui.")
     lay["fuel"] = fuel
