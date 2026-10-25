@@ -14,9 +14,9 @@ on:
         required: true
         default: "-8.2585,118.1506"
       mulai:
-        description: "FARSITE: waktu mulai WITA 'YYYY-MM-DD HH:MM'"
+        description: "FARSITE: waktu mulai WITA 'YYYY-MM-DD HH:MM' (kosong = jam sekarang)"
         required: false
-        default: "2026-09-09 13:00"
+        default: ""
       lama_jam:
         description: "Lama simulasi (jam)"
         default: "24"
@@ -105,6 +105,8 @@ jobs:
         run: |
           OUT="kerja/simulasi/$(date -u +%Y%m%d_%H%M)_${{ inputs.mode }}_$ID"
           echo "OUT=$OUT" >> "$GITHUB_ENV"
+          [ -n "$MULAI" ] || MULAI="$(TZ=Asia/Makassar date +'%Y-%m-%d %H:00')"
+          echo "MULAI_PAKAI=$MULAI" >> "$GITHUB_ENV"
           ARGS="--lcp ${{ steps.ls.outputs.lcp }} --latlon=$TITIK --buffer 30 --radius-km $RADIUS --res $RES --tajuk ${{ inputs.tajuk }} --web --out $OUT"
           KEC=""; ARAH=""
           if [ -n "$ANGIN" ]; then KEC="${ANGIN%%,*}"; ARAH="${ANGIN##*,}"; fi
@@ -143,6 +145,7 @@ jobs:
           d["run"] = e["RUN_URL"]
           d["wxs"] = bool(e.get("WXS"))
           d["masukan"] = {k: e["IN_" + k.upper()] for k in ("mode", "titik", "mulai", "lama", "angin", "tajuk", "ls", "res")}
+          d["masukan"]["mulai"] = e.get("MULAI_PAKAI") or d["masukan"]["mulai"]
           open(os.path.join(out, "catatan.md"), "w").write("```json\n" + json.dumps(d, default=str) + "\n```\n")
           PY
           gh release create "sim-$ID" --prerelease --title "Simulasi $IN_MODE $IN_TITIK ($ID)" \

@@ -1,6 +1,6 @@
 # Menyalakan halaman peta simulasi
 
-Halaman `simulasi.html` di GitHub Pages mengirim permintaan ke Web App Apps Script yang sama dengan penghubung Google Drive. Web App itu menyalakan workflow **Simulasi api** di GitHub memakai token GitHub milik Anda. Token disimpan di Apps Script dan tidak pernah tampil di halaman.
+Tab **Simulasi** di dashboard GitHub Pages mengirim permintaan ke Web App Apps Script yang sama dengan penghubung Google Drive. Web App itu menyalakan workflow **Simulasi api** di GitHub memakai token GitHub milik Anda. Token disimpan di Apps Script dan tidak pernah tampil di halaman.
 
 Cukup dikerjakan sekali.
 
@@ -34,14 +34,15 @@ Jangan membuat *New deployment*, karena itu menghasilkan URL baru. Kalau terlanj
 
 ## 4. Pakai
 
-Buka `https://kopluck8.github.io/Simulasi-API-Tambora/simulasi.html`.
+Buka `https://kopluck8.github.io/Simulasi-API-Tambora/`, tab **Simulasi**.
 
-1. Klik peta untuk menaruh titik api. Kotak oranye adalah Analysis Area.
-2. Pilih **FARSITE** atau **MTT** (angin tetap, wajib isi kecepatan dan arah). FARSITE memakai cuaca per jam dari ERA5/ECMWF di titik api, atau dari file **.wxs** yang Anda unggah (misalnya dari pembuat WXS). Unggahan .wxs disimpan sementara di folder `simulasi_wxs` di Google Drive Anda. Waktu mulai dan lama harus berada di dalam rentang tanggal file .wxs.
-3. Pilih **Crown Fire Calculation Method**: Finney (1998) atau Scott/Reinhardt (2001), sama dengan pilihan di FlamMap.
-4. Klik **Jalankan simulasi**. Status berjalan tampil di bawah tombol, biasanya selesai dalam 5 sampai 20 menit.
-5. Setelah selesai, peta waktu tiba muncul di atas peta. Tombol **Unduh semua** berisi GeoTIFF (waktu tiba, ROS, panjang nyala, intensitas, tipe api), shapefile perimeter per jam, dan PNG.
+1. Klik peta untuk menaruh titik api. Nama resort dan nomor grid 1 km tampil di bawah koordinat. Kotak oranye adalah Analysis Area. Lapisan batas TN, resort, jalur patroli, dan grid 1 km bisa dinyalakan/dimatikan di pojok kanan atas peta.
+2. Isi **tanggal dan jam mulai** (WITA; bawaannya jam sekarang). Halaman langsung mengambil cuaca per jam untuk titik itu (ERA5 untuk tanggal lama, prakiraan untuk 5 hari terakhir sampai 15 hari ke depan), menambah 3 hari pengkondisian, membuat file .wxs, dan menampilkan ringkasan angin, suhu, RH, dan hujan. File .wxs itu yang dipakai simulasi dan bisa diunduh. Bila punya data sendiri, pilih **File .wxs sendiri**. File .wxs disimpan sementara di folder `simulasi_wxs` di Google Drive Anda.
+3. Pilih **FARSITE** (cuaca per jam) atau **MTT** (angin tetap; kecepatan dan arah diisi otomatis dari cuaca jam mulai, boleh diubah).
+4. Pilih **Crown Fire Calculation Method**: Finney (1998) atau Scott/Reinhardt (2001), sama dengan pilihan di FlamMap.
+5. Klik **Jalankan simulasi**. Status berjalan tampil di bawah tombol, biasanya selesai dalam 5 sampai 20 menit.
+6. Setelah selesai, peta waktu tiba muncul di atas peta. Tombol **Unduh semua** berisi GeoTIFF (waktu tiba, ROS, panjang nyala, intensitas, tipe api), shapefile perimeter per jam, dan PNG.
 
-Semua simulasi tersimpan di **Riwayat simulasi** (dari GitHub Releases repo) dan juga di folder `simulasi/` Google Drive.
+Semua simulasi tersimpan di tab **Riwayat** (dari GitHub Releases repo) dan juga di folder `simulasi/` Google Drive.
 
 Batasan: satu simulasi per menit, titik api harus di dalam AOI Tambora, lama maksimal 72 jam.

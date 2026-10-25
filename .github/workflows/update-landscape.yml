@@ -1,8 +1,11 @@
-name: Update landscape mingguan
+name: Update landscape (tiap citra Sentinel-2 baru)
 
+# Dicek 2x sehari (11:00 dan 19:00 WITA). Landscape hanya dihitung bila katalog Sentinel-2 punya citra baru
+# sejak update terakhir, jadi praktis setiap 2-5 hari sesuai lintasan Sentinel-2A/2B/2C.
+# Jalankan manual dari tab Actions untuk memaksa update tanpa menunggu citra baru.
 on:
   schedule:
-    - cron: "0 23 * * 0"     # Senin 07:00 WITA
+    - cron: "0 3,11 * * *"
   workflow_dispatch:
     inputs:
       tanggal:
@@ -29,7 +32,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cek:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      baru: ${{ steps.cek.outputs.baru }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Cek citra Sentinel-2 baru
+        id: cek
+        run: python -m tamborafire cek-citra --status docs/status/landscape_terbaru.json
+
   update:
+    needs: cek
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.cek.outputs.baru == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -55,7 +77,7 @@ jobs:
           key: dasar-${{ hashFiles('config/tambora.toml') }}
       - name: Update landscape
         run: |
-          python -m tamborafire update-mingguan --kerja kerja --status docs/status/landscape_terbaru.json \
+          python -m tamborafire update-landscape --kerja kerja --status docs/status/landscape_terbaru.json \
             ${{ inputs.tanggal && format('--tanggal {0}', inputs.tanggal) || '' }} \
             ${{ inputs.mulai_ulang && '--mulai-ulang' || '' }} ${{ inputs.tanpa_unggah && '--tanpa-unggah' || '' }} \
             ${{ inputs.diagnostik && '--simpan-komposit kerja/diagnostik' || '' }}
@@ -77,7 +99,7 @@ jobs:
             kerja/hasil/pratinjau_fuel.png
             kerja/hasil/fuel_model.tif
             kerja/hasil/bekas_terbakar_musim.tif
-          retention-days: 30
+          retention-days: 15
       - name: Catat status di repo
         if: ${{ !inputs.tanpa_unggah }}
         run: |
@@ -86,4 +108,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/status/
           git diff --cached --quiet || git commit -m "Update landscape $(date -u +%F)"
-          git push
+          git pull --rebase -q origin main && git push

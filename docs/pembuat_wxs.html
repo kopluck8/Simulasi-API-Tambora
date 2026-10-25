@@ -51,8 +51,9 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600}
 </head>
 <body>
 <main>
+<p><a href="index.html">← Dashboard Simulasi API Tambora</a></p>
 <h1>Pembuat file angin/cuaca .WXS</h1>
-<p class="sub">Mengunduh data cuaca per jam (reanalisis ERA5 / ECMWF IFS lewat Open-Meteo) lalu mengubahnya ke format Weather Stream (.wxs) FARSITE/FlamMap, satuan Metric. Bawaan: hotspot VIIRS Piong (savana, ±270 m dpl), 9 September 2026, waktu WITA. Koordinat 118,00 BT adalah puncak/kaldera (±1.300 m), jangan dipakai untuk savana.</p>
+<p class="sub">Mengunduh data cuaca per jam (reanalisis ERA5 / ECMWF IFS lewat Open-Meteo) lalu mengubahnya ke format Weather Stream (.wxs) FARSITE/FlamMap, satuan Metric. Bawaan: hotspot VIIRS Piong (savana, ±270 m dpl), tanggal hari ini, waktu WITA. Untuk simulasi di halaman ini, cuaca sudah dibuat otomatis di tab Simulasi. Koordinat 118,00 BT adalah puncak/kaldera (±1.300 m), jangan dipakai untuk savana.</p>
 
 <section class="card">
   <h2>1. Lokasi dan tanggal</h2>
@@ -117,6 +118,8 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600}
   var VARS = ['temperature_2m','relative_humidity_2m','precipitation','wind_speed_10m','wind_direction_10m','cloud_cover'];
   var $ = function(id){ return document.getElementById(id); };
   var lastText = '', lastName = 'cuaca.wxs';
+  var hariIni = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(new Date());
+  $('target').value = hariIni; $('endd').value = hariIni;
 
   function addDays(iso, n){ var d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
   function params(){

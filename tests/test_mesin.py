@@ -155,3 +155,102 @@ def test_firms_mask():
     lon, lat = Transformer.from_crs("EPSG:32750", "EPSG:4326", always_xy=True).transform(600505, 9089495)
     m = firms.mask([dict(lat=lat, lon=lon)], (100, 100), tr, 32750, 100)
     assert m[50, 50] and m[50, 59] and not m[50, 62] and m.sum() > 250
+
+
+def _dasar_sintetis(folder, n=60):
+    import rasterio
+    from rasterio.transform import from_origin
+    import tomllib
+    cfg = tomllib.load(open(os.path.join(ROOT, "config", "tambora.toml"), "rb"))
+    tr = from_origin(600000, 9090000, 30, 30)
+    os.makedirs(folder, exist_ok=True)
+    nilai = dict(elev=300, slope=5, aspect=90, fuel=31, cover=0, height=0, cbh=0, cbd=0)
+    for k, v in nilai.items():
+        with rasterio.open(os.path.join(folder, cfg["dasar"][k]), "w", driver="GTiff", width=n, height=n, count=1,
+                           dtype="int16", crs="EPSG:32750", transform=tr) as d:
+            d.write(np.full((n, n), v, np.int16), 1)
+    with rasterio.open(os.path.join(folder, cfg["dasar"]["nbr"]), "w", driver="GTiff", width=n, height=n, count=1,
+                       dtype="int16", crs="EPSG:32750", transform=tr, nodata=-32768) as d:
+        d.write(np.full((n, n), 3000, np.int16), 1)
+    return cfg, tr
+
+
+def test_update_jendela_tetap_lanjut_dari_status(tmp_path, monkeypatch):
+    """Update tiap citra baru: status hanya maju di batas jendela 21 hari; jendela berjalan dihitung ulang."""
+    import argparse
+    import datetime as dt
+    import json
+    import rasterio
+    from pyproj import Transformer
+    from tamborafire import cli, sentinel2 as S2
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    cfg, tr = _dasar_sintetis(tmp_path / "dasar")
+    cfg["aoi"]["res"] = 30
+    ll = Transformer.from_crs(32750, 4326, always_xy=True).transform
+    kotak = [ll(x, y) for x, y in ((600000, 9090000), (600900, 9090000), (600900, 9089100), (600000, 9089100))]
+    p_res = tmp_path / "resort.geojson"
+    p_res.write_text(json.dumps({"type": "FeatureCollection", "features": [{"type": "Feature",
+        "properties": {"nama": "Resort Uji", "kode": 1},
+        "geometry": {"type": "Polygon", "coordinates": [kotak + [kotak[0]]]}}]}))
+    cfg["kawasan"] = {"resort": str(p_res)}
+    tgl_citra = [dt.date(2026, 6, 2) + dt.timedelta(days=5 * i) for i in range(40)]
+    api = dt.date(2026, 7, 1)
+    n = 60
+
+    def cari(cfg_, end, days, src, cloud, start=None):
+        return [{"id": f"S2X_MSIL2A_{d:%Y%m%d}T020000_R103_T50MPS_x", "properties": {"datetime": f"{d}T02:00:00Z"}}
+                for d in tgl_citra if start <= d <= end]
+
+    def komposit(cfg_, items, src):
+        tumpuk = []
+        for f in items:
+            d = dt.date.fromisoformat(f["properties"]["datetime"][:10])
+            a = np.full((n, n), 0.30, np.float32)
+            if d > api:
+                a[10:20, 10:20] = -0.05
+            tumpuk.append(a)
+        return dict(nbr=np.median(tumpuk, axis=0), ndvi=np.full((n, n), 0.5, np.float32),
+                    n=np.full((n, n), len(items), np.int16)), [f["id"] for f in items]
+
+    monkeypatch.setattr(S2, "search", cari)
+    monkeypatch.setattr(S2, "median_composite", komposit)
+    monkeypatch.setattr(cli, "load_cfg", lambda path=None: cfg)
+    status = tmp_path / "status.json"
+
+    def jalan(tanggal):
+        args = argparse.Namespace(kerja=str(tmp_path / "kerja"), lokal_dasar=str(tmp_path / "dasar"), tanpa_drive=True,
+                                  status=str(status), tanpa_unggah=False, simpan_komposit=None, mulai_ulang=False,
+                                  tanggal=tanggal)
+        cli.cmd_update(args, cfg)
+        with rasterio.open(tmp_path / "kerja" / "hasil" / "status_jendela.tif") as d:
+            tag = d.tags()["tanggal"]
+        with rasterio.open(tmp_path / "kerja" / "hasil" / "fuel_model.tif") as d:
+            fuel = d.read(1)
+        return json.load(open(status)), tag, fuel
+
+    s1, tag1, f1 = jalan("2026-07-20")          # 3 jendela: 2 lengkap + 07-13..07-20 (1 citra, belum cukup)
+    assert tag1 == "2026-07-13" and (f1[10:20, 10:20] == 31).all()
+    assert s1["citra_terakhir"].startswith("2026-07-17") and s1["status_jendela"] == "2026-07-13"
+    s2, tag2, f2 = jalan("2026-07-25")          # lanjut dari status 07-13; jendela berjalan kini 2 citra
+    assert tag2 == "2026-07-13" and (f2[10:20, 10:20] == 99).all()
+    assert s2["bekas_terbakar_baru_ha"] == pytest.approx(9.0) and s2["baru_sejak"] == "2026-07-20"
+    sisa = s2["kawasan"]["total"]["sisa"]["31"]
+    assert s2["kawasan"]["total"]["awal"]["31"] == pytest.approx(81.0) and sisa == pytest.approx(81.0 - 9.0)
+    s3, tag3, f3 = jalan("2026-08-04")          # jendela 07-13..08-03 lengkap -> status maju
+    assert tag3 == "2026-08-03" and (f3[10:20, 10:20] == 99).all() and s3["bekas_terbakar_musim_ha"] == pytest.approx(9.0)
+    assert [j["jendela"] for j in s3["jendela"]] == ["2026-06-01/2026-06-22", "2026-06-22/2026-07-13", "2026-07-13/2026-08-03"]
+
+
+def test_cek_citra_baru(tmp_path, monkeypatch, capsys):
+    import json
+    from tamborafire import cli, sentinel2 as S2
+    st = tmp_path / "s.json"
+    st.write_text(json.dumps({"citra_terakhir": "2026-10-20T02:07:11.024000Z"}))
+    hasil = tmp_path / "out"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(hasil))
+    item = lambda t: {"properties": {"datetime": t}}
+    monkeypatch.setattr(S2, "search", lambda *a, **k: [item("2026-10-20T02:07:11.024000Z")])
+    cli.cmd_cek_citra(type("A", (), {"status": str(st)})(), cli.load_cfg())
+    monkeypatch.setattr(S2, "search", lambda *a, **k: [item("2026-10-20T02:07:11.024000Z"), item("2026-10-25T02:07:01Z")])
+    cli.cmd_cek_citra(type("A", (), {"status": str(st)})(), cli.load_cfg())
+    assert hasil.read_text().splitlines() == ["baru=false", "baru=true"]

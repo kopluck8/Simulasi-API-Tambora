@@ -223,8 +223,18 @@ def cmd_landscape_dasar(args, cfg):
     print("ditulis", args.out, ls.shape)
 
 
+def _waktu_citra(c):
+    """Waktu akuisisi dari id Sentinel-2 L2A (S2C_MSIL2A_20261020T020711_...) atau ISO; UTC naif."""
+    import re
+    m = re.search(r"_(\d{8}T\d{6})_", c)
+    if m:
+        return dt.datetime.strptime(m.group(1), "%Y%m%dT%H%M%S")
+    return dt.datetime.fromisoformat(c.replace("Z", "+00:00")).replace(tzinfo=None)
+
+
 def cmd_update(args, cfg):
-    """Update mingguan: unduh dasar dari Drive, Sentinel-2 sejak update terakhir, tandai bekas terbakar, unggah."""
+    """Update landscape: unduh dasar dari Drive, Sentinel-2 jendela tetap 21 hari sejak awal musim,
+    tandai bekas terbakar, unggah. Dijalankan tiap ada citra baru; jendela yang belum lengkap dihitung ulang."""
     import rasterio
     from . import landscape as L
     from . import sentinel2 as S2
@@ -233,9 +243,9 @@ def cmd_update(args, cfg):
     os.makedirs(work, exist_ok=True)
     dasar = args.lokal_dasar or os.path.join(work, "dasar")
     drive = None
-    p_scar = os.path.join(work, "bekas_terbakar_musim_lama.tif")
+    p_state = os.path.join(work, "status_jendela_lama.tif")
     p_ref = os.path.join(work, "nbr_acuan_lama.tif")
-    for p in (p_scar, p_ref):
+    for p in (p_state, p_ref):
         if os.path.exists(p):
             os.remove(p)
     if not args.tanpa_drive:
@@ -263,51 +273,63 @@ def cmd_update(args, cfg):
         fid_ls = drive.path(cfg["drive"]["landscape"], root)
         fid_now = drive.path("terbaru", fid_ls)
         if not args.mulai_ulang:
-            for name, p in (("bekas_terbakar_musim.tif", p_scar), ("nbr_acuan.tif", p_ref)):
+            for name, p in (("status_jendela.tif", p_state), ("nbr_acuan.tif", p_ref)):
                 f = drive.find(name, fid_now)
                 if f:
                     drive.download(f["id"], p)
+    elif not args.mulai_ulang:  # tanpa Drive: lanjutkan dari hasil run sebelumnya di folder kerja
+        import shutil
+        for name, p in (("status_jendela.tif", p_state), ("nbr_acuan.tif", p_ref)):
+            if os.path.exists(os.path.join(work, "hasil", name)):
+                shutil.copy(os.path.join(work, "hasil", name), p)
     lay, tr, crs = L.load_base(dasar, cfg)
     nbr0, nbr_path, made = L.base_nbr(dasar, cfg)
     if made and drive:
         drive.upload(nbr_path, fid_dasar)
     tgl = dt.date.fromisoformat(args.tanggal) if args.tanggal else dt.date.today()
     k = cfg["mingguan"]
+    hari = int(k["hari"])
     mm, dd = map(int, k["awal_musim"].split("-"))
     season = dt.date(tgl.year if (tgl.month, tgl.day) >= (mm, dd) else tgl.year - 1, mm, dd)
-    # status sebelumnya: bekas terbakar + NBR acuan bergulir (hanya bila metode & musim sama)
+    lama = {}
+    if args.status and os.path.exists(args.status):
+        try:
+            lama = json.load(open(args.status))
+        except ValueError:
+            lama = {}
+    if lama.get("awal_musim") != season.isoformat():
+        lama = {}
+    # status di batas jendela lengkap terakhir (bekas terbakar + NBR acuan bergulir)
     scar_prev, nbr_ref, last = None, nbr0.copy(), None
-    if os.path.exists(p_scar) and os.path.exists(p_ref):
-        with rasterio.open(p_scar) as d:
+    if os.path.exists(p_state) and os.path.exists(p_ref):
+        with rasterio.open(p_state) as d:
             tags = d.tags()
-            if tags.get("awal_musim") == season.isoformat() and tags.get("metode") == L.METODE:
+            t_state = dt.date.fromisoformat(tags["tanggal"]) if tags.get("tanggal") else None
+            if (tags.get("awal_musim") == season.isoformat() and tags.get("metode") == L.METODE
+                    and tags.get("skema") == L.SKEMA and t_state and t_state <= tgl and L.selaras(season, t_state, hari)):
                 scar_prev = d.read(1)
-                last = dt.date.fromisoformat(tags["tanggal"])
+                last = t_state
                 with rasterio.open(p_ref) as r:
                     a = r.read(1).astype(np.float32)
                     nbr_ref = np.where(a == -32768, np.nan, a / 10000.0).astype(np.float32)
             else:
-                print("Status lama diabaikan (metode/musim berbeda); hitung ulang sejak", season)
+                print("Status lama diabaikan (metode/musim/skema berbeda); hitung ulang sejak", season)
+    wins = L.jendela_musim(season, tgl, hari, last)
     if last is None:
-        wins = L.windows(season, tgl, int(k["hari"]))
         print(f"Hitung ulang sejak awal musim {season}: {len(wins)} jendela")
     else:
-        wins = L.windows(last, tgl, max(int(k["hari"]), (tgl - last).days)) or [(last, tgl)]
-    scar = scar_prev
-    used_all, per = [], []
+        print(f"Lanjut dari status {last}: {len(wins)} jendela ({sum(w[2] for w in wins)} lengkap)")
     ref_mask = None
     p_val = _rel(k.get("validasi_bekas", ""))
     if k.get("validasi_bekas") and os.path.exists(p_val):
         from .geo import read_polygons
         from rasterio.features import rasterize as _rz
         ref_mask = _rz([(read_polygons(p_val), 1)], out_shape=lay["fuel"].shape, transform=tr).astype(bool)
-    fuel = lay["fuel"].copy()
-    info = {}
     from . import firms
     hot_pts = None
     if firms.key() and wins:
         try:
-            hot_pts = firms.fetch(cfg, wins[0][0] - dt.timedelta(days=int(k["hari"])), wins[-1][1])
+            hot_pts = firms.fetch(cfg, wins[0][0] - dt.timedelta(days=hari), wins[-1][1])
             print(f"Hotspot FIRMS: {len(hot_pts)} titik di sekitar AOI")
             if args.simpan_komposit:
                 os.makedirs(args.simpan_komposit, exist_ok=True)
@@ -316,16 +338,20 @@ def cmd_update(args, cfg):
             print("Hotspot FIRMS gagal diambil, pakai konfirmasi jendela berikutnya:", e)
     else:
         print("FIRMS_MAP_KEY kosong: bekas terbakar baru dihitung setelah jendela berikutnya masih gelap")
-    for w0, w1 in wins:
+    st = dict(scar=scar_prev, fuel=L.terapkan_bekas(lay["fuel"], scar_prev, cfg), ref=nbr_ref, info={})
+    used_all, per, terakhir = [], [], []
+
+    def proses(w0, w1):
         items = S2.search(cfg, w1, 0, k["stac"], k["awan_maks"], start=w0)
         print(f"== {w0} s.d. {w1}: {len(items)} citra")
+        terakhir.extend(f["properties"]["datetime"] for f in items)
         if not items:
-            continue
+            return
         try:
             comp, used = S2.median_composite(cfg, items, k["stac"])
         except RuntimeError as e:
             print(" ", e)
-            continue
+            return
         if args.simpan_komposit:
             os.makedirs(args.simpan_komposit, exist_ok=True)
             q = lambda a: np.where(np.isfinite(a[::3, ::3]), np.round(a[::3, ::3] * 10000), -32768).astype(np.int16)
@@ -333,12 +359,13 @@ def cmd_update(args, cfg):
                                 ndvi=q(comp["ndvi"]), n=comp["n"][::3, ::3].astype(np.uint8))
         hot = None
         if hot_pts is not None:
-            a0 = (w0 - dt.timedelta(days=int(k["hari"]))).isoformat()
+            a0 = (w0 - dt.timedelta(days=hari)).isoformat()
             pts = [p for p in hot_pts if a0 <= p["tanggal"] <= w1.isoformat()]
             hot = firms.mask(pts, lay["fuel"].shape, tr, cfg["aoi"]["epsg"], float(k.get("hotspot_buffer_m", 750)))
             print(f"   hotspot {a0} s.d. {w1}: {len(pts)} titik")
-        fuel, scar, ndvi, dnbr, nbr_ref, info = L.update(lay, nbr_ref, comp, cfg, scar, hotspot=hot)
-        used_all += used
+        fuel, scar, ndvi, dnbr, ref, info = L.update(lay, st["ref"], comp, cfg, st["scar"], hotspot=hot)
+        st.update(fuel=fuel, scar=scar, ref=ref, info=info)
+        used_all.extend(used)
         per.append(dict(jendela=f"{w0}/{w1}", citra=len(used), baru_ha=info["bekas_terbakar_baru_ha"],
                         koreksi=info["koreksi_musiman_dnbr"]))
         msg = f"   bekas terbakar baru {info['bekas_terbakar_baru_ha']} ha, koreksi musiman {info['koreksi_musiman_dnbr']}"
@@ -361,8 +388,18 @@ def cmd_update(args, cfg):
                     f"di luar p50/99/99.9 {qo}")
             per[-1]["validasi_9sep_persen"] = round(100 * float(hit.sum() / ref_mask.sum()), 1)
         print(msg)
-    if scar is None:
+
+    simpan = (scar_prev, nbr_ref.copy(), last or season)  # status untuk update berikutnya
+    for w0, w1, lengkap in wins:
+        proses(w0, w1)
+        if lengkap:
+            simpan = (None if st["scar"] is None else st["scar"].copy(), st["ref"].copy(), w1)
+    scar, fuel = st["scar"], st["fuel"]
+    if scar is None and last is None:
         sys.exit("Tidak ada citra cerah sama sekali; landscape tidak diperbarui.")
+    if scar is None:
+        scar = np.zeros(lay["fuel"].shape, np.uint8)
+    fuel0 = lay["fuel"].astype(np.int16)
     lay["fuel"] = fuel
     out = os.path.join(work, "hasil")
     os.makedirs(out, exist_ok=True)
@@ -377,10 +414,40 @@ def cmd_update(args, cfg):
     with rasterio.open(os.path.join(out, "bekas_terbakar_musim.tif"), "w", dtype="uint8", **prof) as d:
         d.write(scar, 1)
         d.update_tags(awal_musim=season.isoformat(), tanggal=stamp, metode=L.METODE)
+    s_scar, s_ref, s_tgl = simpan
+    with rasterio.open(os.path.join(out, "status_jendela.tif"), "w", dtype="uint8", **prof) as d:
+        d.write(np.zeros(fuel.shape, np.uint8) if s_scar is None else s_scar.astype(np.uint8), 1)
+        d.update_tags(awal_musim=season.isoformat(), tanggal=s_tgl.isoformat(), metode=L.METODE, skema=L.SKEMA)
     with rasterio.open(os.path.join(out, "nbr_acuan.tif"), "w", dtype="int16", nodata=-32768, **prof) as d:
-        d.write(np.where(np.isfinite(nbr_ref), np.round(nbr_ref * 10000), -32768).astype(np.int16), 1)
-    info = dict(info)
-    info.update(tanggal=stamp, citra=used_all, awal_musim=season.isoformat(), lcp=name + ".lcp", jendela=per)
+        d.write(np.where(np.isfinite(s_ref), np.round(s_ref * 10000), -32768).astype(np.int16), 1)
+    ha = float(cfg["aoi"]["res"]) ** 2 / 1e4
+    info = dict(st["info"])
+    info.setdefault("mode", k["mode_kelas"])
+    info.setdefault("metode", L.METODE)
+    for kunci in ("hotspot", "piksel_cerah_persen", "koreksi_musiman_dnbr"):
+        if kunci not in info and kunci in lama:
+            info[kunci] = lama[kunci]
+    musim = round(float((scar == 1).sum() * ha), 1)
+    info["bekas_terbakar_musim_ha"] = musim
+    if "bekas_terbakar_musim_ha" in lama:
+        info["bekas_terbakar_baru_ha"] = round(max(0.0, musim - float(lama["bekas_terbakar_musim_ha"])), 1)
+        info["baru_sejak"] = lama.get("tanggal")
+    info["luas_fuel_ha"] = {str(int(v)): round(float(c * ha), 1) for v, c in zip(*np.unique(fuel, return_counts=True))}
+    # riwayat jendela: gabung dengan status lama, jendela yang sama (tanggal awal sama) diganti
+    jend = {j["jendela"].split("/")[0]: j for j in lama.get("jendela", [])}
+    jend.update({j["jendela"].split("/")[0]: j for j in per})
+    t_akhir = [_waktu_citra(t) for t in terakhir]
+    if lama.get("citra_terakhir"):
+        t_akhir.append(_waktu_citra(lama["citra_terakhir"]))
+    info.update(tanggal=stamp, citra=used_all, awal_musim=season.isoformat(), lcp=name + ".lcp",
+                jendela=[jend[s] for s in sorted(jend)], skema=L.SKEMA, status_jendela=s_tgl.isoformat(),
+                jadwal="tiap ada citra Sentinel-2 baru (dicek 2x sehari)")
+    if t_akhir:
+        info["citra_terakhir"] = max(t_akhir).isoformat() + "Z"
+    p_res = _rel(cfg.get("kawasan", {}).get("resort", ""))
+    if cfg.get("kawasan", {}).get("resort") and os.path.exists(p_res):
+        info["kawasan"] = L.statistik_kawasan(p_res, fuel0, fuel, scar, tr, cfg["aoi"]["epsg"], float(cfg["aoi"]["res"]))
+        print("Sisa K1-K4 di kawasan (ha):", info["kawasan"]["total"]["sisa"])
     json.dump(info, open(os.path.join(out, "ringkasan.json"), "w"), indent=1)
     L.preview_png(fuel, os.path.join(out, "pratinjau_fuel.png"), f"Fuel model Tambora {stamp}")
     zp = os.path.join(out, name + ".zip")
@@ -389,12 +456,13 @@ def cmd_update(args, cfg):
             z.write(os.path.join(out, f), f)
         z.write(_rel(cfg["kalibrasi"]["fmd"]), os.path.basename(cfg["kalibrasi"]["fmd"]))
         z.write(_rel(cfg["kalibrasi"]["fms"]), os.path.basename(cfg["kalibrasi"]["fms"]))
-    print(json.dumps({k2: v for k2, v in info.items() if k2 != "citra"}, indent=1))
+    print(json.dumps({k2: v for k2, v in info.items() if k2 not in ("citra", "jendela", "kawasan")}, indent=1))
     if drive and not args.tanpa_unggah:
         arsip = drive.path(f"arsip/{stamp}", fid_ls)
         for f in ("fuel_model.tif", "bekas_terbakar_musim.tif", "ringkasan.json", "pratinjau_fuel.png"):
             drive.upload(os.path.join(out, f), arsip)
-        for f in ("fuel_model.tif", "bekas_terbakar_musim.tif", "nbr_acuan.tif", "ringkasan.json", "pratinjau_fuel.png"):
+        for f in ("fuel_model.tif", "bekas_terbakar_musim.tif", "status_jendela.tif", "nbr_acuan.tif",
+                  "ringkasan.json", "pratinjau_fuel.png"):
             drive.upload(os.path.join(out, f), fid_now)
         drive.upload(zp, fid_now, "landscape_terbaru_10m.zip")
         drive.upload(os.path.join(out, name + ".lcp"), fid_now, "landscape_terbaru_10m.lcp")
@@ -403,6 +471,35 @@ def cmd_update(args, cfg):
     if args.status and not args.tanpa_unggah:
         os.makedirs(os.path.dirname(args.status), exist_ok=True)
         json.dump(info, open(args.status, "w"), indent=1)
+
+
+def cmd_cek_citra(args, cfg):
+    """Ada citra Sentinel-2 baru (awan < awan_maks) sejak citra terakhir di status? Tulis baru=true/false
+    ke $GITHUB_OUTPUT supaya workflow hanya memperbarui landscape bila ada citra baru."""
+    from . import sentinel2 as S2
+    k = cfg["mingguan"]
+    st = json.load(open(args.status)) if args.status and os.path.exists(args.status) else {}
+    if st.get("citra_terakhir"):
+        last = _waktu_citra(st["citra_terakhir"])
+    elif st.get("citra"):
+        last = max(_waktu_citra(c) for c in st["citra"])
+    else:
+        last = None
+    baru, ket = True, "belum ada status landscape"
+    if last is not None:
+        try:
+            items = S2.search(cfg, dt.date.today(), 0, k["stac"], k["awan_maks"], start=last.date())
+            new = [f for f in items if _waktu_citra(f["properties"]["datetime"]) > last + dt.timedelta(minutes=30)]
+            baru = bool(new)
+        except Exception as e:  # coba lagi pada jadwal cek berikutnya
+            print("Katalog Sentinel-2 tidak bisa dicek:", e)
+            new, baru = [], False
+        tgl = sorted({f["properties"]["datetime"][:10] for f in new})
+        ket = f"citra terakhir {last:%Y-%m-%d %H:%M} UTC; baru: {', '.join(tgl) or 'tidak ada'}"
+    print(("ADA citra baru: " if baru else "Tidak ada citra baru: ") + ket)
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"baru={'true' if baru else 'false'}\n")
 
 
 def cmd_ambil_landscape(args, cfg):
@@ -505,7 +602,8 @@ def main(argv=None):
     q.add_argument("--dasar", required=True), q.add_argument("--out", required=True)
     q.set_defaults(f=cmd_landscape_dasar)
 
-    q = sp.add_parser("update-mingguan", help="perbarui landscape dari Sentinel-2 dan simpan ke Drive")
+    q = sp.add_parser("update-mingguan", aliases=["update-landscape"],
+                     help="perbarui landscape dari Sentinel-2 (tiap ada citra baru) dan simpan ke Drive")
     q.add_argument("--tanggal"), q.add_argument("--kerja", default="kerja")
     q.add_argument("--lokal-dasar", help="folder GeoTIFF dasar lokal (lewati unduh dari Drive)")
     q.add_argument("--tanpa-drive", action="store_true"), q.add_argument("--status")
@@ -513,6 +611,10 @@ def main(argv=None):
     q.add_argument("--simpan-komposit", metavar="DIR", help="diagnostik: simpan median NBR/NDVI tiap jendela (30 m) ke DIR")
     q.add_argument("--mulai-ulang", action="store_true", help="abaikan status lama, hitung ulang sejak awal musim")
     q.set_defaults(f=cmd_update)
+
+    q = sp.add_parser("cek-citra", help="ada citra Sentinel-2 baru sejak update landscape terakhir?")
+    q.add_argument("--status", default="docs/status/landscape_terbaru.json")
+    q.set_defaults(f=cmd_cek_citra)
 
     q = sp.add_parser("ambil-landscape", help="unduh landscape terbaru dari Drive")
     q.add_argument("--out", default="kerja/terbaru")

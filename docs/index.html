@@ -4,42 +4,201 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulasi API Tambora</title>
-<style>
-:root{--bg:#f6f6f3;--fg:#1c1c1a;--muted:#686862;--card:#fff;--line:#dcdbd5;--accent:#1f6f5c}
-@media (prefers-color-scheme: dark){:root{--bg:#151514;--fg:#ebebe8;--muted:#a2a29b;--card:#1e1e1c;--line:#34342f;--accent:#5fbfa3}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:960px;margin:0 auto;padding:24px 16px 64px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
-.sub{color:var(--muted);margin:0 0 20px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
-a{color:var(--accent)}img{max-width:100%;border-radius:8px}table{border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
-td,th{padding:4px 10px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}
-</style>
+<meta name="description" content="Simulasi rambatan api (FlamMap MTT / FARSITE) untuk savana Taman Nasional Tambora, dengan landscape Sentinel-2 terbaru dan cuaca per jam.">
+<link rel="icon" href="assets/ikon.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
+<header class="kepala">
+  <div class="kepala-isi">
+    <img class="logo" src="assets/logo.png" alt="Logo Kementerian dan Taman Nasional Tambora">
+    <div class="judul">
+      <h1>Simulasi Kebakaran Hutan dan Lahan</h1>
+      <p>Taman Nasional Tambora · mesin setara FlamMap MTT / FARSITE, landscape Sentinel-2 terbaru</p>
+    </div>
+    <span class="lencana" id="lencanaLandscape"><i></i><span>Memuat status landscape…</span></span>
+  </div>
+  <nav class="tab-bar" role="tablist" aria-label="Menu">
+    <button class="tab" role="tab" data-tab="ringkasan" aria-selected="true">Ringkasan</button>
+    <button class="tab" role="tab" data-tab="simulasi" aria-selected="false">Simulasi</button>
+    <button class="tab" role="tab" data-tab="riwayat" aria-selected="false">Riwayat</button>
+    <button class="tab" role="tab" data-tab="landscape" aria-selected="false">Landscape</button>
+    <button class="tab" role="tab" data-tab="panduan" aria-selected="false">Panduan</button>
+  </nav>
+</header>
+
 <main>
-<h1>Simulasi API Tambora</h1>
-<p class="sub">Pendamping FlamMap/FARSITE untuk savana TN Tambora: landscape diperbarui tiap minggu dari Sentinel-2, fuel savana terkalibrasi (fmd20), dan cuaca per jam dari ERA5/ECMWF.</p>
-<section class="card">
-  <h2>Landscape terbaru</h2>
-  <div id="status">Memuat…</div>
-  <p><img id="prev" src="status/pratinjau_fuel.png" alt="Peta fuel model terbaru" onerror="this.remove()"></p>
-</section>
-<section class="card">
-  <h2>Alat</h2>
-  <ul>
-    <li><a href="pembuat_wxs.html">Pembuat file angin/cuaca .WXS</a> (ERA5 / ECMWF lewat Open-Meteo)</li>
-    <li><a href="simulasi.html"><b>Simulasi api di peta</b></a>: klik titik api, pilih FARSITE/MTT dan metode api tajuk, lihat dan unduh hasilnya.</li>
-    <li>Bisa juga dari tab <b>Actions → Simulasi api</b> di repo GitHub. Hasil juga disimpan ke Google Drive folder <code>simulasi/</code>.</li>
-  </ul>
-</section>
+  <!-- RINGKASAN -->
+  <section class="panel" id="panel-ringkasan" role="tabpanel">
+    <div class="kpi-baris">
+      <div class="kpi"><span>Landscape terbaru</span><b id="kpiTanggal">–</b><small id="kpiCitra">–</small></div>
+      <div class="kpi api"><span>Bekas terbakar musim ini</span><b id="kpiTerbakar">–</b><small id="kpiTerbakarSub">–</small></div>
+      <div class="kpi"><span id="kpiSisaJudul">Sisa bahan bakar K1–K4</span><b id="kpiSisa">–</b><small id="kpiSisaSub">–</small></div>
+      <div class="kpi"><span>Simulasi dijalankan</span><b id="kpiSim">–</b><small id="kpiSimSub">–</small></div>
+    </div>
+    <div class="dua-kolom">
+      <div class="kartu">
+        <h2>Peta bahan bakar terbaru</h2>
+        <img class="pratinjau" id="pratinjau" src="status/pratinjau_fuel.png" alt="Peta fuel model terbaru">
+        <p class="petunjuk">K1–K4 = savana (fuel 30–33). Bekas terbakar musim ini menjadi fuel 99 (tidak terbakar lagi dalam simulasi).</p>
+      </div>
+      <div>
+        <div class="kartu">
+          <h2 id="judulKomposisi">Bahan bakar savana K1–K4</h2>
+          <div class="tw" id="tabelK"></div>
+        </div>
+        <div class="kartu" id="kartuResort" hidden>
+          <h2>Sisa K1–K4 per resort</h2>
+          <div class="tw" id="tabelResort"></div>
+        </div>
+        <div class="kartu">
+          <h2>Mulai simulasi</h2>
+          <p class="muted small">Klik titik api di peta, isi tanggal dan jam kejadian. Cuaca per jam (.wxs) dibuat otomatis untuk titik dan waktu itu.</p>
+          <div class="aksi-baris"><button data-ke="simulasi">Buka simulasi</button><button class="garis" data-ke="riwayat">Lihat riwayat</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="kartu">
+      <h2>Bekas terbakar baru per jendela citra 21 hari</h2>
+      <div id="grafikJendela" class="muted small">Memuat…</div>
+    </div>
+  </section>
+
+  <!-- SIMULASI -->
+  <section class="panel" id="panel-simulasi" role="tabpanel" hidden>
+    <div class="sim">
+      <div class="kiri-panel">
+        <div class="kartu">
+          <div class="langkah">
+            <h3><span class="nomor">1</span>Titik api</h3>
+            <label for="titik">Lintang, bujur</label>
+            <input id="titik" placeholder="klik peta, atau ketik -8.2585,118.1506" autocomplete="off">
+            <div class="info-titik" id="infoTitik"><span class="muted">Klik peta untuk menaruh titik api.</span></div>
+          </div>
+          <div class="langkah">
+            <h3><span class="nomor">2</span>Waktu kejadian dan cuaca</h3>
+            <div class="baris2">
+              <div><label for="mulai">Tanggal &amp; jam mulai (WITA)</label><input id="mulai" type="datetime-local" step="3600"></div>
+              <div><label for="lama">Lama simulasi (jam)</label><input id="lama" type="number" min="1" max="72" step="1" value="24"></div>
+            </div>
+            <div class="pilihan" role="radiogroup" aria-label="Sumber cuaca">
+              <label><input type="radio" name="sumberCuaca" value="otomatis" checked> Cuaca otomatis (ERA5 / ECMWF)</label>
+              <label><input type="radio" name="sumberCuaca" value="file"> File .wxs sendiri</label>
+            </div>
+            <div id="blokFile" hidden>
+              <label for="wxs">File .wxs</label><input id="wxs" type="file" accept=".wxs,.txt">
+            </div>
+            <div id="kotakCuaca" class="pesan ok">Cuaca per jam diambil otomatis setelah titik api dipilih.</div>
+            <div id="ringkasCuaca" hidden>
+              <div class="cuaca-statistik" id="statCuaca"></div>
+              <details><summary>Tabel cuaca per jam</summary><div class="tabel-cuaca" id="tabelCuaca"></div></details>
+              <div class="aksi-baris" style="margin-top:8px"><button class="garis kecil" id="unduhWxs">Unduh .wxs</button><span class="petunjuk" id="infoWxs"></span></div>
+            </div>
+          </div>
+          <div class="langkah">
+            <h3><span class="nomor">3</span>Model</h3>
+            <div class="baris2">
+              <div><label for="mode">Mode</label>
+                <select id="mode"><option value="farsite">FARSITE (cuaca per jam)</option><option value="mtt">MTT (angin tetap)</option></select></div>
+              <div><label for="tajuk">Crown Fire Calculation Method</label>
+                <select id="tajuk"><option value="finney">Finney (1998)</option><option value="scott">Scott/Reinhardt (2001)</option><option value="tanpa">Tanpa api tajuk</option></select></div>
+            </div>
+            <div class="baris2">
+              <div><label for="kec">Angin 20-ft (km/j)</label><input id="kec" type="number" min="0" max="150" step="1" placeholder="dari cuaca"></div>
+              <div><label for="arah">Arah asal angin (°)</label><input id="arah" type="number" min="0" max="360" step="1" placeholder="dari cuaca"></div>
+            </div>
+            <p class="petunjuk" id="hintAngin">FARSITE: kosongkan agar angin mengikuti cuaca per jam. Isi untuk memaksa angin tetap.</p>
+            <div class="baris2">
+              <div><label for="radius">Analysis Area (km)</label><input id="radius" type="number" min="1" max="20" step="1" value="8"></div>
+              <div><label for="res">Resolusi</label><select id="res"><option value="10">10 m (detail)</option><option value="30">30 m (cepat)</option></select></div>
+            </div>
+            <label for="ls">Landscape</label>
+            <select id="ls"><option value="drive">Terbaru (Sentinel-2, Google Drive)</option><option value="contoh">Contoh Piong 30 m</option></select>
+          </div>
+          <button class="utama" id="jalan">Jalankan simulasi</button>
+          <div id="status" class="pesan"></div>
+        </div>
+        <div class="kartu" id="kotakHasil" hidden>
+          <h2>Hasil simulasi</h2>
+          <div class="tw" id="ringkasHasil"></div>
+          <div class="unduhan" id="unduhHasil"></div>
+        </div>
+      </div>
+      <div id="peta" aria-label="Peta simulasi"></div>
+    </div>
+  </section>
+
+  <!-- RIWAYAT -->
+  <section class="panel" id="panel-riwayat" role="tabpanel" hidden>
+    <div class="kartu">
+      <div class="aksi-baris" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Riwayat simulasi</h2><button class="garis kecil" id="muatUlang">Muat ulang</button></div>
+      <div class="tw" id="tabelRiwayat"><div class="riwayat-kosong">Memuat…</div></div>
+      <p class="petunjuk">Hasil disimpan sebagai GitHub Release (tag <code>sim-…</code>) dan di Google Drive folder <code>simulasi/</code>.</p>
+    </div>
+  </section>
+
+  <!-- LANDSCAPE -->
+  <section class="panel" id="panel-landscape" role="tabpanel" hidden>
+    <div class="dua-kolom">
+      <div class="kartu">
+        <h2>Jadwal dan status update</h2>
+        <div class="tw" id="tabelStatus"></div>
+        <p class="petunjuk">Landscape dicek dua kali sehari (11:00 dan 19:00 WITA) dan dihitung ulang setiap ada citra Sentinel-2 baru, biasanya tiap 2–5 hari. Bisa juga dijalankan manual dari <a id="linkActions" target="_blank" rel="noopener">GitHub Actions</a>.</p>
+      </div>
+      <div class="kartu">
+        <h2>Luas per fuel model (seluruh AOI)</h2>
+        <div class="tw" id="tabelFuel"></div>
+      </div>
+    </div>
+    <div class="kartu">
+      <h2>Jendela citra 21 hari</h2>
+      <div class="tw" id="tabelJendela"></div>
+      <p class="petunjuk">Tiap jendela membandingkan median NBR 21 hari dengan jendela sebelumnya. Petak gelap baru dihitung bekas terbakar hanya bila dekat titik panas VIIRS/MODIS (FIRMS). Jendela yang sedang berjalan dihitung ulang setiap ada citra baru.</p>
+    </div>
+  </section>
+
+  <!-- PANDUAN -->
+  <section class="panel" id="panel-panduan" role="tabpanel" hidden>
+    <div class="kartu prosa">
+      <h2>Cara menjalankan simulasi</h2>
+      <ol>
+        <li>Buka tab <b>Simulasi</b>, lalu klik peta di lokasi titik api. Nama resort dan nomor grid 1 km muncul di bawah koordinat.</li>
+        <li>Isi <b>tanggal dan jam mulai</b> (WITA). Bawaannya jam sekarang. Cuaca per jam untuk titik itu langsung diambil dan dijadikan file .wxs, ditambah 3 hari sebelumnya untuk pengkondisian kadar air bahan bakar. Ringkasan angin, suhu, RH, dan hujan tampil di bawahnya.</li>
+        <li>Pilih mode: <b>FARSITE</b> (angin dan cuaca berubah tiap jam) atau <b>MTT</b> (angin tetap; kecepatan dan arah diisi otomatis dari cuaca jam mulai dan boleh diubah).</li>
+        <li>Pilih <b>Crown Fire Calculation Method</b>: Finney (1998) atau Scott/Reinhardt (2001), sama seperti di FlamMap.</li>
+        <li>Klik <b>Jalankan simulasi</b>. Simulasi berjalan di GitHub Actions, biasanya 2–20 menit. Hasilnya tampil di peta dan bisa diunduh (GeoTIFF waktu tiba, perimeter shapefile, PNG).</li>
+      </ol>
+      <h3>Sumber cuaca</h3>
+      <ul>
+        <li>Tanggal lebih dari 5 hari lalu: reanalisis ERA5 / ERA5-Land (arsip Open-Meteo).</li>
+        <li>5 hari terakhir, hari ini, dan sampai 15 hari ke depan: model ECMWF/GFS terbaik (prakiraan Open-Meteo).</li>
+        <li>Ini data model grid 9–25 km, bukan pengamatan stasiun. Bila punya data stasiun atau BMKG, pilih <b>File .wxs sendiri</b>.</li>
+      </ul>
+      <h3>Lapisan peta</h3>
+      <ul>
+        <li><b>Batas TN</b> dan <b>batas resort</b>: kawasan TN Tambora dan enam resort.</li>
+        <li><b>Jalur patroli</b>: jalur patroli, eksplorasi, pendakian, dan jalan lain. Klik garis untuk melihat nama dan panjangnya.</li>
+        <li><b>Grid 1 km</b>: kotak bernomor; warna menunjukkan kolom Nilai (1, 0, atau kosong) dari data aslinya.</li>
+        <li>Lapisan bisa dinyalakan dan dimatikan dari tombol lapisan di pojok kanan atas peta.</li>
+      </ul>
+      <h3>Landscape dan bahan bakar</h3>
+      <ul>
+        <li>Fuel savana K1–K4 = model 30–33 terkalibrasi (fmd20). Hutan TL6/TU1, batuan dan bekas terbakar 99.</li>
+        <li>Landscape 10 m diperbarui otomatis setiap ada citra Sentinel-2 baru. Bekas terbakar sejak 1 Juni ditandai dari penurunan NBR yang dekat titik panas FIRMS.</li>
+      </ul>
+      <h3>Tautan</h3>
+      <ul>
+        <li><a id="linkRepo" target="_blank" rel="noopener">Repositori GitHub</a> (kode, panduan Google Drive, panduan halaman simulasi)</li>
+        <li><a href="pembuat_wxs.html">Pembuat .wxs lengkap</a> untuk FlamMap desktop (pilihan model dan mode kompatibilitas tanggal)</li>
+      </ul>
+    </div>
+  </section>
 </main>
-<script>
-fetch('status/landscape_terbaru.json',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
-  var el=document.getElementById('status');
-  if(!d.tanggal){el.textContent=d.catatan||'Belum ada update.';return;}
-  var nama={30:'K1',31:'K2',32:'K3',33:'K4',99:'batu/bekas terbakar',161:'TU1',186:'TL6',91:'permukiman',93:'pertanian',98:'air',142:'SH2'};
-  var rows=Object.keys(d.luas_fuel_ha||{}).map(function(k){return '<tr><td>'+k+' '+(nama[k]||'')+'</td><td>'+d.luas_fuel_ha[k].toLocaleString('id-ID')+'</td></tr>'}).join('');
-  el.innerHTML='<p>Tanggal <b>'+d.tanggal+'</b> · mode kelas <b>'+d.mode+'</b> · '+(d.citra||[]).length+' citra · bekas terbakar baru <b>'+d.bekas_terbakar_baru_ha+' ha</b>, sejak '+d.awal_musim+' <b>'+d.bekas_terbakar_musim_ha+' ha</b></p><table><tr><th>Fuel model</th><th>ha</th></tr>'+rows+'</table>';
-}).catch(function(){document.getElementById('status').textContent='Belum ada update.';});
-</script>
+<footer class="kaki">Simulasi API Tambora · data cuaca Open-Meteo (ERA5, ECMWF) · citra Copernicus Sentinel-2 · titik panas NASA FIRMS</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="simulasi_config.js"></script>
+<script src="assets/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,156 @@
+:root{
+  --bg:#f3f4f1;--fg:#1d2420;--muted:#5f6b64;--card:#fff;--line:#d9ddd7;--soft:#eef1ec;
+  --brand:#1f5c3b;--brand-2:#2f7a50;--brand-fg:#fff;--fire:#c4501b;--fire-soft:#fbe9df;
+  --ok:#2e7d32;--warn:#9a5b00;--warn-soft:#fff4e0;--err:#b3261e;--err-soft:#fdecea;
+  --shadow:0 1px 2px rgba(20,30,25,.06),0 2px 8px rgba(20,30,25,.05);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121614;--fg:#e7ebe8;--muted:#9aa6a0;--card:#1a201d;--line:#2c3531;--soft:#212925;
+  --brand:#6cc597;--brand-2:#4fa77a;--brand-fg:#0c1a12;--fire:#f08a5d;--fire-soft:#3a2219;
+  --ok:#7fc58a;--warn:#e7a849;--warn-soft:#2d2414;--err:#f2867d;--err-soft:#2e1716;--shadow:none}}
+:root[data-theme="dark"]{
+  --bg:#121614;--fg:#e7ebe8;--muted:#9aa6a0;--card:#1a201d;--line:#2c3531;--soft:#212925;
+  --brand:#6cc597;--brand-2:#4fa77a;--brand-fg:#0c1a12;--fire:#f08a5d;--fire-soft:#3a2219;
+  --ok:#7fc58a;--warn:#e7a849;--warn-soft:#2d2414;--err:#f2867d;--err-soft:#2e1716;--shadow:none}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--brand)}
+h1,h2,h3{margin:0;line-height:1.25}
+h2{font-size:16px;margin-bottom:10px}
+h3{font-size:14px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+/* kepala halaman */
+.kepala{background:var(--card);border-bottom:1px solid var(--line)}
+.kepala-isi{max-width:1320px;margin:0 auto;padding:12px 16px 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{height:56px;width:auto}
+.judul{flex:1;min-width:220px}
+.judul h1{font-size:19px}
+.judul p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+.lencana{display:inline-flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:var(--soft);white-space:nowrap}
+.lencana i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.tab-bar{max-width:1320px;margin:0 auto;padding:0 8px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab{appearance:none;border:0;background:none;color:var(--muted);font:inherit;font-weight:600;font-size:14px;padding:12px 14px 10px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--fg)}
+.tab[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand)}
+main{max-width:1320px;margin:0 auto;padding:18px 16px 56px}
+.panel[hidden]{display:none}
+
+/* kartu dan kisi */
+.kartu{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px;min-width:0}
+.kpi-baris{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow)}
+.kpi span{display:block;font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.kpi b{display:block;font-size:26px;font-variant-numeric:tabular-nums;margin:4px 0 2px}
+.kpi small{color:var(--muted);font-size:13px}
+.kpi.api b{color:var(--fire)}
+.dua-kolom{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.dua-kolom{grid-template-columns:1fr}}
+.aksi-baris{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+img.pratinjau{width:100%;border-radius:8px;border:1px solid var(--line);background:#fff}
+
+/* tabel */
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12.5px}
+tr.total td{font-weight:700}
+td.kiri,th.kiri{text-align:left}
+.batang{height:8px;border-radius:4px;background:var(--soft);overflow:hidden;min-width:80px}
+.batang i{display:block;height:100%;background:var(--brand-2)}
+.batang i.api{background:var(--fire)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+/* grafik batang jendela */
+.grafik{display:flex;align-items:flex-end;gap:6px;height:170px;padding:8px 0 0;border-bottom:1px solid var(--line)}
+.grafik .kol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+.grafik .kol i{display:block;width:100%;max-width:46px;background:var(--fire);border-radius:4px 4px 0 0;min-height:2px}
+.grafik .kol b{font-size:11.5px;font-weight:600;margin-bottom:3px;font-variant-numeric:tabular-nums}
+.grafik-label{display:flex;gap:6px}
+.grafik-label span{flex:1;text-align:center;font-size:11px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* tombol dan formulir */
+button,.tombol{font:inherit;font-weight:600;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;background:var(--brand);color:var(--brand-fg);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+button.garis,.tombol.garis{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+button.kecil{padding:5px 10px;font-size:13px}
+button:disabled{opacity:.5;cursor:default}
+button.utama{width:100%;justify-content:center;padding:11px;font-size:15px;background:var(--fire);color:#fff;margin-top:14px}
+label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+input,select{font:inherit;width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+input[type=file]{padding:6px}
+.baris2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.petunjuk{font-size:12.5px;color:var(--muted);margin:5px 0 0}
+.langkah{border-top:1px solid var(--line);padding-top:12px;margin-top:14px}
+.langkah:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.langkah h3{margin:0 0 2px;display:flex;align-items:center;gap:8px;font-size:14.5px}
+.nomor{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--brand);color:var(--brand-fg);font-size:12px;flex:none}
+.pilihan{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pilihan label{margin:0;display:flex;align-items:center;gap:6px;font-weight:500;color:var(--fg);font-size:13.5px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+.pilihan input{width:auto;margin:0}
+.pilihan label:has(input:checked){border-color:var(--brand);background:var(--soft)}
+.info-titik{font-size:13px;margin-top:6px;color:var(--fg)}
+.pesan{font-size:13.5px;border-radius:8px;padding:9px 11px;margin-top:10px;white-space:pre-line}
+.pesan:empty{display:none}
+.pesan.err{background:var(--err-soft);color:var(--err)}
+.pesan.warn{background:var(--warn-soft);color:var(--warn)}
+.pesan.ok{background:var(--soft)}
+.ok-teks{color:var(--ok)}.err-teks{color:var(--err)}
+
+/* tab simulasi */
+.sim{display:grid;grid-template-columns:400px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.sim{grid-template-columns:1fr}}
+.sim .kiri-panel{min-width:0}
+#peta{height:calc(100vh - 150px);min-height:520px;border-radius:10px;border:1px solid var(--line);position:sticky;top:12px}
+@media (max-width:980px){#peta{height:60vh;min-height:360px;position:relative;top:0;order:-1}}
+.cuaca-statistik{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.cuaca-statistik div{border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:var(--bg)}
+.cuaca-statistik b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.cuaca-statistik span{font-size:11.5px;color:var(--muted)}
+@media (max-width:420px){.cuaca-statistik{grid-template-columns:repeat(2,1fr)}}
+details{margin-top:8px}
+details summary{cursor:pointer;color:var(--brand);font-weight:600;font-size:13.5px}
+.tabel-cuaca{max-height:260px;overflow:auto;margin-top:6px;border:1px solid var(--line);border-radius:8px}
+.tabel-cuaca table{font-size:12.5px}
+.tabel-cuaca th{position:sticky;top:0;background:var(--card)}
+.panah{display:inline-block;width:14px;text-align:center}
+.unduhan a{display:inline-flex;margin:6px 12px 0 0;font-weight:600}
+
+/* peta */
+.leaflet-container{font:inherit;background:#dfe5df}
+.legenda{background:var(--card);color:var(--fg);padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.5;box-shadow:var(--shadow);border:1px solid var(--line);max-width:220px}
+.legenda b{display:block;margin-bottom:2px;font-size:12.5px}
+.legenda .gar{display:inline-block;width:22px;height:0;border-top:3px solid;vertical-align:middle;margin-right:6px}
+.legenda .kot{display:inline-block;width:14px;height:10px;border:1.5px solid;vertical-align:middle;margin-right:6px}
+.legenda summary{color:var(--fg);font-size:12.5px}
+.bar-waktu{height:10px;width:170px;background:linear-gradient(90deg,#fcffa4,#f98e09,#bc3754,#57106e,#000004);border-radius:2px;margin:4px 0 2px}
+.lbl-resort{background:rgba(255,255,255,.85);border:0;box-shadow:none;color:#173d27;font-weight:700;font-size:12px;padding:1px 6px;border-radius:4px}
+.lbl-resort::before{display:none}
+.lbl-grid{background:none;border:0;box-shadow:none;color:#fff;font-size:10px;font-weight:700;text-shadow:0 0 3px #000,0 0 2px #000;padding:0}
+.lbl-grid::before{display:none}
+.zoom-jauh .lbl-grid{display:none}
+.leaflet-popup-content{font-size:13px;margin:10px 12px}
+.leaflet-popup-content table{font-size:12.5px}
+
+/* riwayat */
+.riwayat-kosong{padding:24px;text-align:center;color:var(--muted)}
+.lencana-mode{display:inline-block;font-size:11.5px;font-weight:700;border-radius:4px;padding:1px 6px;background:var(--soft);color:var(--brand)}
+.lencana-mode.mtt{color:var(--fire)}
+
+/* panduan */
+.prosa{max-width:860px}
+.prosa h2{margin-top:6px}
+.prosa h3{font-size:15px;margin:18px 0 6px}
+.prosa li{margin-bottom:6px}
+.prosa code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:13px}
+.kaki{max-width:1320px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font-size:12.5px}
+/* kontrol Leaflet tidak ikut gaya formulir */
+.leaflet-container label{display:block;margin:0;font-size:13px;font-weight:500;color:#1d2420}
+.leaflet-container input{width:auto;padding:0;margin:0 6px 0 0;border:0;background:none}
+.leaflet-control-layers-expanded{padding:6px 10px 6px 8px;font-size:13px;line-height:1.6}
+.leaflet-popup-content table{width:auto}
+.leaflet-popup-content td{white-space:normal;text-align:left;padding:3px 6px}

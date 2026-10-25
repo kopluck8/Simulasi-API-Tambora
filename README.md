@@ -5,7 +5,8 @@ Pendamping FlamMap/FARSITE untuk savana TN Gunung Tambora. Repo ini berisi:
 - **Mesin rambatan api** (Python): model permukaan Rothermel, mode **MTT** (angin dan kadar air tetap, seperti MTT FlamMap) dan mode **FARSITE** (cuaca dan angin berubah per jam dari `.wxs`).
 - **Angin di atas medan**: memakai WindNinja bila `WindNinja_cli` terpasang. Kalau tidak ada, dipakai model medan bawaan (MicroMet).
 - **Cuaca**: unduh data per jam ERA5 / ECMWF lewat Open-Meteo dan tulis `.wxs`. Ini port dari pembuat WXS yang sudah dipakai (`docs/pembuat_wxs.html`).
-- **Landscape mingguan**: GitHub Actions mengambil Sentinel-2 terbaru tiap Senin, menandai bekas terbakar baru, menulis `.lcp` 10 m, lalu menyimpannya ke **Google Drive** Anda.
+- **Landscape otomatis**: GitHub Actions mengecek katalog Sentinel-2 dua kali sehari dan, setiap ada citra baru (±tiap 2–5 hari), menandai bekas terbakar baru, menulis `.lcp` 10 m, lalu menyimpannya ke **Google Drive** Anda.
+- **Dashboard GitHub Pages** (`docs/index.html`): tab Ringkasan, Simulasi (peta dengan batas TN, resort, jalur patroli, grid 1 km; cuaca .wxs dibuat langsung dari tanggal dan jam kejadian), Riwayat, Landscape, Panduan.
 - **Fuel terkalibrasi**: `kalibrasi/tambora_savana_cepat20.fmd` (fmd20) + `kalibrasi/tambora_latihan.fms`.
 
 > Status: alat latihan/kalibrasi. Kelas K1–K4 masih kelas relatif dari NDVI, belum dari biomassa plot survei.
@@ -91,12 +92,14 @@ Panduan rinci langkah demi langkah: [docs/PANDUAN_GOOGLE_DRIVE.md](docs/PANDUAN_
 3. Isi secrets GitHub: `GDRIVE_FOLDER_ID`, `GDRIVE_TOKEN_URL`, `GDRIVE_KUNCI`.
 4. Disarankan: secret `FIRMS_MAP_KEY` (gratis, https://firms.modaps.eosdis.nasa.gov/api/map_key/) supaya bekas terbakar dicocokkan dengan titik panas VIIRS/MODIS.
 
-## Update landscape mingguan
+## Update landscape otomatis
 
-Workflow `Update landscape mingguan` berjalan tiap Senin 07:00 WITA. Bisa juga dijalankan manual dari tab Actions.
+Workflow `Update landscape (tiap citra Sentinel-2 baru)` mengecek katalog Sentinel-2 pukul 11:00 dan 19:00 WITA (`tambora cek-citra`). Landscape hanya dihitung bila ada citra baru (awan < 70%) sejak citra terakhir yang tercatat di `docs/status/landscape_terbaru.json`, jadi praktis tiap 2–5 hari mengikuti lintasan Sentinel-2A/2B/2C. Bisa juga dijalankan manual dari tab Actions (selalu dihitung).
+
+Jendela citra 21 hari berjangkar tetap pada awal musim (1 Jun, 22 Jun, 13 Jul, …). Status bekas terbakar dan NBR acuan (`status_jendela.tif`, `nbr_acuan.tif` di Drive) hanya disimpan di batas jendela yang sudah lengkap; jendela yang sedang berjalan dihitung ulang dengan semua citranya setiap ada citra baru. Dengan begitu update yang sering tetap membandingkan median 21 hari dengan acuan sebelumnya, bukan satu-dua citra saja.
 
 1. Unduh GeoTIFF dasar dari Drive (di-cache di Actions).
-2. Cari Sentinel-2 L2A per jendela 21 hari (Planetary Computer, tanpa akun). Tiap piksel diambil median pengamatan cerahnya (awan, bayangan, dan tepi awan 3 piksel dimasking dengan SCL); piksel dengan kurang dari 2 pengamatan cerah dilewati.
+2. Cari Sentinel-2 L2A per jendela 21 hari tetap (Planetary Computer, tanpa akun). Tiap piksel diambil median pengamatan cerahnya (awan, bayangan, dan tepi awan 3 piksel dimasking dengan SCL); piksel dengan kurang dari 2 pengamatan cerah dilewati.
 3. Deteksi bekas terbakar:
    - dNBR = NBR acuan − NBR jendela ini. NBR acuan adalah pengamatan cerah terakhir *sebelum* jendela ini (`nbr_acuan.tif` di Drive).
    - Pengeringan musiman dikoreksi secara **lokal**: median dNBR per blok 1,5 km per kelompok (rumput, hutan/semak), karena dataran rendah mengering lebih dulu.
@@ -104,7 +107,7 @@ Workflow `Update landscape mingguan` berjalan tiap Senin 07:00 WITA. Bisa juga d
    - Dengan `FIRMS_MAP_KEY`: hanya petak yang berjarak ≤ 750 m dari titik panas VIIRS/MODIS pada periode itu yang dihitung. Tanpa kunci: petak menjadi kandidat dulu dan baru dihitung bila jendela berikutnya masih gelap.
    - `bekas_terbakar_musim.tif`: 1 = bekas terbakar (fuel 99, tidak terbakar lagi), 2 = kandidat. Diakumulasi sejak 1 Juni.
    - Pada run pertama, atau dengan opsi *mulai ulang*, seluruh musim dihitung ulang per jendela 21 hari.
-4. Tulis `.lcp` 10 m, unggah ke Drive, dan catat ringkasan di `docs/status/`. Ringkasan ini tampil di GitHub Pages.
+4. Tulis `.lcp` 10 m, unggah ke Drive, dan catat ringkasan di `docs/status/`, termasuk sisa K1–K4 per resort (`[kawasan]` di config, poligon `docs/data/batas_resort.geojson`). Ringkasan ini tampil di dashboard GitHub Pages.
 
 Mode kelas (`config/tambora.toml`, `[mingguan] mode_kelas`):
 - `dasar` (bawaan): K1–K4 tetap dari awal kemarau, sesuai aturan proyek bahwa peta fuel tidak dibangun ulang dari citra sesudah kebakaran.
@@ -115,7 +118,7 @@ NDVI/NBR dihitung dari DN mentah (termasuk offset +1000), sama dengan file latih
 
 ## Simulasi dari GitHub (tanpa PC)
 
-Paling mudah lewat **halaman peta** `https://kopluck8.github.io/Simulasi-API-Tambora/simulasi.html`: klik titik api, pilih FARSITE/MTT dan metode api tajuk (Finney 1998 / Scott-Reinhardt 2001), jalankan, lalu lihat dan unduh hasilnya. Penyiapan sekali (token GitHub di Apps Script): [docs/PANDUAN_HALAMAN_SIMULASI.md](docs/PANDUAN_HALAMAN_SIMULASI.md).
+Paling mudah lewat **dashboard** `https://kopluck8.github.io/Simulasi-API-Tambora/` tab **Simulasi**: klik titik api, isi tanggal dan jam kejadian (bawaan: jam sekarang; cuaca per jam dan .wxs dibuat otomatis untuk titik itu), pilih FARSITE/MTT dan metode api tajuk (Finney 1998 / Scott-Reinhardt 2001), jalankan, lalu lihat dan unduh hasilnya. Penyiapan sekali (token GitHub di Apps Script): [docs/PANDUAN_HALAMAN_SIMULASI.md](docs/PANDUAN_HALAMAN_SIMULASI.md).
 
 Bisa juga dari tab Actions → **Simulasi api** → *Run workflow*. Hasil diterbitkan sebagai GitHub Release `sim-<id>` (overlay, PNG, `hasil.zip`) dan disimpan ke Drive `simulasi/`.
 
@@ -131,7 +134,8 @@ Di baris perintah, metode api tajuk dipilih dengan `--tajuk finney|scott|tanpa` 
 | `tamborafire/wind.py` | angin seragam, model medan MicroMet, pembungkus WindNinja_cli |
 | `tamborafire/moisture.py` | kadar air tetap (.fms) atau conditioning per jam |
 | `tamborafire/weather.py` | Open-Meteo → .wxs, baca/tulis .wxs |
-| `tamborafire/landscape.py`, `sentinel2.py` | landscape dasar dan update mingguan |
+| `tamborafire/landscape.py`, `sentinel2.py` | landscape dasar dan update tiap citra baru, statistik per resort |
+| `docs/` | dashboard GitHub Pages (`index.html`, `assets/`), lapisan peta `data/*.geojson` |
 | `tamborafire/drive.py` | Google Drive (OAuth / service account) |
 | `tamborafire/lcp.py` | baca/tulis .lcp (header 7316 byte) |
 | `tests/` | uji terhadap angka flammap.dll dan bekas terbakar 9 Sep |

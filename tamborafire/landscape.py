@@ -234,6 +234,65 @@ def windows(start: dt.date, end: dt.date, days: int):
     return out
 
 
+# Jendela citra berjangkar tetap pada awal musim (1 Jun, 22 Jun, 13 Jul, ...). Status (bekas terbakar + NBR
+# acuan) hanya disimpan di batas jendela yang sudah lengkap; jendela yang sedang berjalan dihitung ulang
+# setiap ada citra baru, jadi update tiap ~5 hari tetap membandingkan median 21 hari dengan acuan sebelumnya.
+SKEMA = "jendela-tetap"
+
+
+def selaras(awal: dt.date, tanggal: dt.date, hari: int) -> bool:
+    """Apakah `tanggal` jatuh tepat di batas jendela tetap yang berjangkar pada `awal`."""
+    return tanggal >= awal and (tanggal - awal).days % hari == 0
+
+
+def jendela_musim(awal: dt.date, sampai: dt.date, hari: int, mulai: dt.date | None = None):
+    """Jendela tetap dari `mulai` (batas jendela; None = awal musim) sampai `sampai`.
+    Mengembalikan [(w0, w1, lengkap)]; jendela terakhir bisa belum lengkap."""
+    return [(w0, w1, (w1 - w0).days == hari) for w0, w1 in windows(mulai or awal, sampai, hari)]
+
+
+def terapkan_bekas(fuel0, scar, cfg):
+    """Fuel dasar dengan bekas terbakar (status 1) diganti kode_terbakar."""
+    fuel = np.asarray(fuel0).astype(np.int16).copy()
+    if scar is not None:
+        fuel[scar == 1] = int(cfg["mingguan"]["kode_terbakar"])
+    return fuel
+
+
+def statistik_kawasan(path, fuel0, fuel, scar, transform, epsg, res):
+    """Luas K1-K4 (30-33) awal musim dan sisa, serta bekas terbakar musim ini, per resort.
+    path: GeoJSON poligon WGS84 dengan properti nama (dan kode)."""
+    import shapely
+    from pyproj import Transformer
+    from rasterio.features import rasterize
+    from shapely.geometry import shape
+    to = Transformer.from_crs(4326, epsg, always_xy=True).transform
+    tf = lambda fn, g: shapely.transform(g, lambda c: np.column_stack(fn(c[:, 0], c[:, 1])))
+    ha = res * res / 1e4
+    kelas = (30, 31, 32, 33)
+    resort, tot = [], None
+    for f in json.load(open(path))["features"]:
+        m = rasterize([(tf(to, shape(f["geometry"])), 1)], out_shape=fuel.shape, transform=transform,
+                      fill=0, dtype="uint8").astype(bool)
+        r = dict(nama=f["properties"].get("nama"), kode=f["properties"].get("kode"),
+                 luas_ha=round(float(m.sum() * ha), 1),
+                 awal={str(c): round(float(((fuel0 == c) & m).sum() * ha), 1) for c in kelas},
+                 sisa={str(c): round(float(((fuel == c) & m).sum() * ha), 1) for c in kelas},
+                 terbakar_musim_ha=round(float(((scar == 1) & m).sum() * ha), 1) if scar is not None else 0.0)
+        resort.append(r)
+        if tot is None:
+            tot = dict(luas_ha=0.0, awal={str(c): 0.0 for c in kelas}, sisa={str(c): 0.0 for c in kelas},
+                       terbakar_musim_ha=0.0)
+        tot["luas_ha"] += r["luas_ha"]
+        tot["terbakar_musim_ha"] += r["terbakar_musim_ha"]
+        for c in kelas:
+            tot["awal"][str(c)] += r["awal"][str(c)]
+            tot["sisa"][str(c)] += r["sisa"][str(c)]
+    if tot:
+        tot = json.loads(json.dumps(tot), parse_float=lambda s: round(float(s), 1))
+    return dict(resort=resort, total=tot)
+
+
 def preview_png(fuel, path, title=""):
     import matplotlib
     matplotlib.use("Agg")

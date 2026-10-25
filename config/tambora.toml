@@ -36,7 +36,7 @@ nbr = "nbr_dasar_x10000.tif"                               # dibuat otomatis dar
 
 [mingguan]
 stac = "planetary"            # "planetary" (Microsoft Planetary Computer) atau "earthsearch" (AWS)
-hari = 21                     # jendela citra ke belakang dari tanggal update
+hari = 21                     # panjang jendela citra tetap sejak awal musim (1 Jun, 22 Jun, 13 Jul, ...)
 awan_maks = 70                # % awan per citra
 mode_kelas = "dasar"          # "dasar": K1-K4 tetap dari awal kemarau, hanya bekas terbakar diperbarui
                               # "batas": K1-K4 dihitung ulang dari NDVI terbaru dengan batas tetap di bawah
@@ -63,3 +63,6 @@ windninja_mesh = 100          # m
 burn_period = [0, 24]
 zona = "WITA"
 model_cuaca = "best_match"
+
+[kawasan]
+resort = "docs/data/batas_resort.geojson"   # statistik sisa K1-K4 per resort di dashboard (poligon WGS84)
