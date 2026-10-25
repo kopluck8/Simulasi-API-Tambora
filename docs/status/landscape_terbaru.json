@@ -2,40 +2,41 @@
  "mode": "dasar",
  "metode": "dnbr-median-bergulir-v5",
  "hotspot": true,
- "piksel_cerah_persen": 86.4,
+ "piksel_cerah_persen": 97.3,
  "koreksi_musiman_dnbr": {
-  "rumput": 0.0075,
-  "hutan/semak": 0.012
+  "rumput": 0.0115,
+  "hutan/semak": 0.0198
  },
  "kandidat_baru_ha": 0.0,
  "kandidat_gugur_ha": 0.0,
  "kandidat_menunggu_ha": 0.0,
- "tanpa_hotspot_diabaikan_ha": 621.1,
- "bekas_terbakar_baru_ha": 2506.3,
- "bekas_terbakar_musim_ha": 24123.7,
+ "tanpa_hotspot_diabaikan_ha": 699.8,
+ "bekas_terbakar_baru_ha": 634.3,
+ "bekas_terbakar_musim_ha": 24758.0,
  "baru_per_kelompok_ha": {
-  "rumput": 1224.8,
-  "hutan/semak": 1281.5
+  "rumput": 1707.9,
+  "hutan/semak": 1499.5
  },
  "baru_elevasi_persentil_m": [
-  76,
-  350,
-  1486
+  79,
+  363,
+  1326
  ],
  "luas_fuel_ha": {
-  "30": 2210.4,
-  "31": 22247.6,
-  "32": 20099.9,
-  "33": 6320.7,
+  "30": 2207.6,
+  "31": 22115.9,
+  "32": 19818.8,
+  "33": 6267.9,
   "91": 192.3,
   "93": 4009.4,
   "98": 32878.9,
-  "99": 25649.2,
+  "99": 26283.5,
   "142": 0.3,
-  "161": 20768.9,
-  "186": 48022.4
+  "161": 20684.5,
+  "186": 47941.0
  },
- "tanggal": "2026-10-22",
+ "baru_sejak": "2026-10-22",
+ "tanggal": "2026-10-25",
  "citra": [
   "S2C_MSIL2A_20260602T020651_R103_T50MPS_20260602T061312",
   "S2C_MSIL2A_20260602T020651_R103_T50MNS_20260602T061312",
@@ -128,6 +129,7 @@
   "S2A_MSIL2A_20260823T022341_R103_T50LPR_20260823T101809",
   "S2A_MSIL2A_20260823T022341_R103_T50LNR_20260823T101809",
   "S2B_MSIL2A_20260826T020649_R103_T50MPS_20260826T050913",
+  "S2B_MSIL2A_20260826T020649_R103_T50MNS_20260826T050913",
   "S2B_MSIL2A_20260826T020649_R103_T50LPR_20260826T050913",
   "S2B_MSIL2A_20260826T020649_R103_T50LNR_20260826T050913",
   "S2C_MSIL2A_20260831T020651_R103_T50MPS_20260831T061513",
@@ -182,10 +184,16 @@
   "S2C_MSIL2A_20261020T020711_R103_T50MPS_20261020T061005",
   "S2C_MSIL2A_20261020T020711_R103_T50MNS_20261020T061005",
   "S2C_MSIL2A_20261020T020711_R103_T50LPR_20261020T061005",
-  "S2C_MSIL2A_20261020T020711_R103_T50LNR_20261020T061005"
+  "S2C_MSIL2A_20261020T020711_R103_T50LNR_20261020T061005",
+  "S2A_MSIL2A_20261022T022331_R103_T50MNS_20261022T065614",
+  "S2A_MSIL2A_20261022T022331_R103_T50LPR_20261022T065614",
+  "S2A_MSIL2A_20261022T022331_R103_T50LNR_20261022T065614",
+  "S2B_MSIL2A_20261025T020749_R103_T50MPS_20261025T051040",
+  "S2B_MSIL2A_20261025T020749_R103_T50MNS_20261025T051040",
+  "S2B_MSIL2A_20261025T020749_R103_T50LPR_20261025T051040"
  ],
  "awal_musim": "2026-06-01",
- "lcp": "tambora_20261022_10m.lcp",
+ "lcp": "tambora_20261025_10m.lcp",
  "jendela": [
   {
    "jendela": "2026-06-01/2026-06-22",
@@ -241,42 +249,174 @@
   },
   {
    "jendela": "2026-08-24/2026-09-14",
-   "citra": 17,
-   "baru_ha": 4275.9,
+   "citra": 18,
+   "baru_ha": 4303.4,
    "koreksi": {
-    "rumput": 0.029,
-    "hutan/semak": 0.0247
+    "rumput": 0.0288,
+    "hutan/semak": 0.0242
    },
    "kandidat_baru_ha": 0.0,
    "kandidat_gugur_ha": 0.0,
-   "tanpa_hotspot_diabaikan_ha": 962.2,
+   "tanpa_hotspot_diabaikan_ha": 954.1,
    "validasi_9sep_persen": 0.0
   },
   {
    "jendela": "2026-09-14/2026-10-05",
    "citra": 23,
-   "baru_ha": 8940.3,
+   "baru_ha": 8845.9,
    "koreksi": {
-    "rumput": 0.0238,
-    "hutan/semak": 0.027
+    "rumput": 0.024,
+    "hutan/semak": 0.0274
    },
    "kandidat_baru_ha": 0.0,
    "kandidat_gugur_ha": 0.0,
-   "tanpa_hotspot_diabaikan_ha": 1644.9,
+   "tanpa_hotspot_diabaikan_ha": 1686.9,
    "validasi_9sep_persen": 85.2
   },
   {
-   "jendela": "2026-10-05/2026-10-22",
-   "citra": 16,
-   "baru_ha": 2506.3,
+   "jendela": "2026-10-05/2026-10-25",
+   "citra": 22,
+   "baru_ha": 3207.5,
    "koreksi": {
-    "rumput": 0.0075,
-    "hutan/semak": 0.012
+    "rumput": 0.0115,
+    "hutan/semak": 0.0198
    },
    "kandidat_baru_ha": 0.0,
    "kandidat_gugur_ha": 0.0,
-   "tanpa_hotspot_diabaikan_ha": 621.1,
+   "tanpa_hotspot_diabaikan_ha": 699.8,
    "validasi_9sep_persen": 85.2
   }
- ]
+ ],
+ "skema": "jendela-tetap",
+ "status_jendela": "2026-10-05",
+ "jadwal": "tiap ada citra Sentinel-2 baru (dicek 2x sehari)",
+ "citra_terakhir": "2026-10-25T02:07:49.024000Z",
+ "kawasan": {
+  "resort": [
+   {
+    "nama": "Resort Piong",
+    "kode": 1,
+    "luas_ha": 21455.3,
+    "awal": {
+     "30": 266.0,
+     "31": 8026.3,
+     "32": 7756.6,
+     "33": 788.3
+    },
+    "sisa": {
+     "30": 207.1,
+     "31": 5140.6,
+     "32": 5300.0,
+     "33": 680.7
+    },
+    "terbakar_musim_ha": 5869.5
+   },
+   {
+    "nama": "Resort Oi Katupa",
+    "kode": 2,
+    "luas_ha": 13496.7,
+    "awal": {
+     "30": 217.2,
+     "31": 3430.3,
+     "32": 2282.0,
+     "33": 794.4
+    },
+    "sisa": {
+     "30": 200.5,
+     "31": 2482.2,
+     "32": 1632.7,
+     "33": 534.3
+    },
+    "terbakar_musim_ha": 2006.5
+   },
+   {
+    "nama": "Resort Kawinda Toi",
+    "kode": 3,
+    "luas_ha": 9447.3,
+    "awal": {
+     "30": 326.2,
+     "31": 2248.5,
+     "32": 1573.4,
+     "33": 365.6
+    },
+    "sisa": {
+     "30": 303.4,
+     "31": 951.2,
+     "32": 644.7,
+     "33": 258.2
+    },
+    "terbakar_musim_ha": 2406.1
+   },
+   {
+    "nama": "Resort Doro Ncanga",
+    "kode": 4,
+    "luas_ha": 20135.4,
+    "awal": {
+     "30": 299.6,
+     "31": 3521.3,
+     "32": 6460.7,
+     "33": 1916.7
+    },
+    "sisa": {
+     "30": 272.6,
+     "31": 2792.4,
+     "32": 4502.6,
+     "33": 1522.4
+    },
+    "terbakar_musim_ha": 3832.0
+   },
+   {
+    "nama": "Resort Doropeti",
+    "kode": 5,
+    "luas_ha": 11047.6,
+    "awal": {
+     "30": 163.3,
+     "31": 891.0,
+     "32": 840.9,
+     "33": 957.0
+    },
+    "sisa": {
+     "30": 163.1,
+     "31": 845.9,
+     "32": 737.6,
+     "33": 924.2
+    },
+    "terbakar_musim_ha": 467.5
+   },
+   {
+    "nama": "Resort Pancasila",
+    "kode": 6,
+    "luas_ha": 2723.2,
+    "awal": {
+     "30": 193.6,
+     "31": 614.2,
+     "32": 368.3,
+     "33": 462.6
+    },
+    "sisa": {
+     "30": 173.2,
+     "31": 410.8,
+     "32": 197.5,
+     "33": 313.9
+    },
+    "terbakar_musim_ha": 621.7
+   }
+  ],
+  "total": {
+   "luas_ha": 78305.5,
+   "awal": {
+    "30": 1465.9,
+    "31": 18731.6,
+    "32": 19281.9,
+    "33": 5284.6
+   },
+   "sisa": {
+    "30": 1319.9,
+    "31": 12623.1,
+    "32": 13015.1,
+    "33": 4233.7
+   },
+   "terbakar_musim_ha": 15203.3
+  }
+ }
 }
