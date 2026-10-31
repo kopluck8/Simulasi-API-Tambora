@@ -1,55 +1,72 @@
 {
  "sumber": "delineasi manual",
  "mode": "gabung",
- "jumlah_delineasi": 0,
- "tanggal": null,
- "awal_musim": null,
- "terbakar_ha": 0.0,
- "luar_kawasan_ha": 0.0,
+ "jumlah_delineasi": 1,
+ "tanggal": "2026-10-30",
+ "awal_musim": "2026-06-01",
+ "terbakar_ha": 24288.6,
+ "luar_kawasan_ha": 8.8,
  "luas_kawasan_ha": 78686.9,
  "resort": [
   {
    "nama": "Resort Piong",
    "kode": 1,
    "luas_ha": 21740.0,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 11911.1
   },
   {
    "nama": "Resort Oi Katupa",
    "kode": 2,
    "luas_ha": 13496.8,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 3698.1
   },
   {
    "nama": "Resort Kawinda Toi",
    "kode": 3,
    "luas_ha": 9447.3,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 2949.4
   },
   {
    "nama": "Resort Doro Ncanga",
    "kode": 4,
    "luas_ha": 20232.3,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 5229.7
   },
   {
    "nama": "Resort Doropeti",
    "kode": 5,
    "luas_ha": 11047.4,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 61.3
   },
   {
    "nama": "Resort Pancasila",
    "kode": 6,
    "luas_ha": 2723.1,
-   "terbakar_ha": 0.0
+   "terbakar_ha": 438.9
   }
  ],
- "riwayat": [],
- "file": [],
- "peringatan": [
-  "Belum ada file delineasi di folder Drive."
+ "riwayat": [
+  {
+   "tanggal": "2026-10-30",
+   "baru_ha": 24288.6,
+   "kumulatif_ha": 24288.6,
+   "file": [
+    "delineasi_2026-10-30.zip"
+   ]
+  }
  ],
- "sidik": "da39a3ee5e6b4b0d",
- "diperbarui": "2026-10-31T09:48:31+00:00"
+ "file": [
+  {
+   "nama": "delineasi_2026-10-30.zip",
+   "subfolder": "",
+   "tanggal": "2026-10-30",
+   "asal_tanggal": "nama file",
+   "poligon": 131,
+   "luas_ha": 24297.4
+  }
+ ],
+ "peringatan": [],
+ "persen_kawasan": 30.87,
+ "sidik": "72afc842cf6c9102",
+ "diperbarui": "2026-10-31T10:12:15+00:00"
 }
