@@ -3,7 +3,7 @@
  "mode": "gabung",
  "jumlah_delineasi": 1,
  "tanggal": "2026-10-30",
- "awal_musim": "2026-06-01",
+ "awal_musim": "2026-02-20",
  "terbakar_ha": 24288.6,
  "luar_kawasan_ha": 8.8,
  "luas_kawasan_ha": 78686.9,
@@ -67,6 +67,6 @@
  ],
  "peringatan": [],
  "persen_kawasan": 30.87,
- "sidik": "72afc842cf6c9102",
- "diperbarui": "2026-10-31T10:12:15+00:00"
+ "sidik": "11227fdbb9bfee4d",
+ "diperbarui": "2026-10-31T10:25:21+00:00"
 }
