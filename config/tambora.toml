@@ -20,6 +20,7 @@ folder_id = ""
 dasar = "dasar"                    # GeoTIFF dasar (topografi, kanopi, fuel awal kemarau)
 landscape = "landscape"            # hasil mingguan: landscape/terbaru dan landscape/arsip/<tanggal>
 simulasi = "simulasi"              # hasil simulasi dari GitHub Actions
+delineasi = "delineasi"            # SHP delineasi manual areal terbakar (diunggah tiap 5 hari), dibaca workflow areal-terbakar
 
 [dasar]
 # Nama file GeoTIFF dasar di folder Drive 'dasar' (sama dengan isi geotiff_junijuli2026_10m.zip)
@@ -66,3 +67,11 @@ model_cuaca = "best_match"
 
 [kawasan]
 resort = "docs/data/batas_resort.geojson"   # statistik sisa K1-K4 per resort di dashboard (poligon WGS84)
+tn = "docs/data/batas_tn.geojson"           # batas kawasan untuk luas areal terbakar di dalam kawasan
+
+[delineasi]
+# Delineasi manual areal terbakar di folder Drive 'delineasi' -> docs/status/areal_terbakar.json dan peta_terbakar.html
+mode = "gabung"               # "gabung": semua delineasi sejak awal musim digabung; file boleh kumulatif atau hanya areal baru
+                              # "terbaru": file tanggal terakhir dianggap seluruh areal terbakar musim ini (koreksi ikut terpakai)
+awal_musim = "06-01"          # delineasi sebelum tanggal ini (tahun berjalan) diabaikan
+luas_min_ha = 0.01            # potongan poligon lebih kecil dari ini tidak digambar di peta

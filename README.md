@@ -116,6 +116,15 @@ Mode kelas (`config/tambora.toml`, `[mingguan] mode_kelas`):
 
 NDVI/NBR dihitung dari DN mentah (termasuk offset +1000), sama dengan file latihan. Dengan mode `kuantil` pada median Juni–Juli, batas yang dihasilkan persis 0,317/0,593/0,781.
 
+## Delineasi manual areal terbakar
+
+Delineasi manual (misalnya tiap 5 hari) cukup diunggah sebagai zip SHP ke folder Drive `delineasi`, dengan tanggal di nama file
+(`delineasi_2026-10-30.zip`). Workflow `Areal terbakar (delineasi manual)` memeriksa folder itu setiap jam, menggabungkan semua
+delineasi sejak awal musim (tumpang tindih tidak dihitung dua kali), menghitung luas per resort di UTM 50S, lalu menulis
+`docs/status/areal_terbakar.json` dan `docs/data/areal_terbakar.geojson`. Hasilnya tampil di
+[peta areal terbakar](https://kopluck8.github.io/Simulasi-API-Tambora/peta_terbakar.html) dan di dashboard Satu Data Tambora.
+Panduan: [docs/PANDUAN_DELINEASI.md](docs/PANDUAN_DELINEASI.md). Uji tanpa Drive: `tambora areal-terbakar --lokal folder_shp`.
+
 ## Simulasi dari GitHub (tanpa PC)
 
 Paling mudah lewat **dashboard** `https://kopluck8.github.io/Simulasi-API-Tambora/` tab **Simulasi**: klik titik api, isi tanggal dan jam kejadian (bawaan: jam sekarang; cuaca per jam dan .wxs dibuat otomatis untuk titik itu), pilih FARSITE/MTT dan metode api tajuk (Finney 1998 / Scott-Reinhardt 2001), jalankan, lalu lihat dan unduh hasilnya. Penyiapan sekali (token GitHub di Apps Script): [docs/PANDUAN_HALAMAN_SIMULASI.md](docs/PANDUAN_HALAMAN_SIMULASI.md).
@@ -137,6 +146,7 @@ Di baris perintah, metode api tajuk dipilih dengan `--tajuk finney|scott|tanpa` 
 | `tamborafire/landscape.py`, `sentinel2.py` | landscape dasar dan update tiap citra baru, statistik per resort |
 | `docs/` | dashboard GitHub Pages (`index.html`, `assets/`), lapisan peta `data/*.geojson` |
 | `tamborafire/drive.py` | Google Drive (OAuth / service account) |
+| `tamborafire/delineasi.py` | delineasi manual areal terbakar dari Drive → rekap per resort + GeoJSON (`docs/peta_terbakar.html`) |
 | `tamborafire/lcp.py` | baca/tulis .lcp (header 7316 byte) |
 | `tests/` | uji terhadap angka flammap.dll dan bekas terbakar 9 Sep |
 

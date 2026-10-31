@@ -527,6 +527,43 @@ def cmd_unggah(args, cfg):
             print("unggah", f); d.upload(f, fid)
 
 
+def cmd_areal_terbakar(args, cfg):
+    """Delineasi manual areal terbakar di Drive -> docs/status/areal_terbakar.json + docs/data/areal_terbakar.geojson."""
+    from . import delineasi as D
+    k = cfg.get("delineasi", {})
+    lama = {}
+    if os.path.exists(args.status):
+        try:
+            lama = json.load(open(args.status, encoding="utf-8"))
+        except ValueError:
+            lama = {}
+    kerja = os.path.join(args.kerja, "delineasi")
+    if args.lokal:
+        sets, sidik = D.kumpulan_lokal(args.lokal), None
+    else:
+        from .drive import Drive
+        drive = Drive()
+        fid = drive.path(cfg["drive"].get("delineasi", "delineasi"), cfg["drive"]["folder_id"])
+        files = D.daftar_drive(drive, fid)
+        sidik = D.sidik(files)
+        print(f"folder delineasi: {len(files)} file, sidik {sidik}")
+        if sidik == lama.get("sidik") and not args.paksa:
+            print("Tidak ada perubahan di folder delineasi.")
+            return
+        import shutil
+        shutil.rmtree(kerja, ignore_errors=True)
+        sets = D.unduh_drive(drive, files, kerja)
+    hasil, gj = D.olah(sets, _rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), _rel(cfg["kawasan"]["resort"]),
+                       k.get("awal_musim", cfg["mingguan"]["awal_musim"]), k.get("mode", "gabung"),
+                       float(k.get("luas_min_ha", 0.01)))
+    hasil.update(sidik=sidik, diperbarui=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat())
+    D.tulis(hasil, gj, args.status, args.geojson)
+    for p in hasil["peringatan"]:
+        print("peringatan:", p)
+    print(f"{hasil['jumlah_delineasi']} tanggal delineasi, terbakar di kawasan {hasil['terbakar_ha']} ha "
+          f"(terakhir {hasil['tanggal']}), {len(gj['features'])} poligon -> {args.status}, {args.geojson}")
+
+
 def cmd_drive_auth(args, cfg):
     from .drive import authorize_interactive
     tok = authorize_interactive(args.client_id, args.client_secret)
@@ -623,6 +660,14 @@ def main(argv=None):
     q = sp.add_parser("unggah", help="unggah file/folder ke Drive")
     q.add_argument("file", nargs="+"), q.add_argument("--ke", required=True, help="folder tujuan di Drive, mis. dasar")
     q.set_defaults(f=cmd_unggah)
+
+    q = sp.add_parser("areal-terbakar", help="rekap + GeoJSON areal terbakar dari SHP delineasi manual di Drive")
+    q.add_argument("--status", default="docs/status/areal_terbakar.json")
+    q.add_argument("--geojson", default="docs/data/areal_terbakar.geojson")
+    q.add_argument("--kerja", default="kerja")
+    q.add_argument("--lokal", help="uji: baca folder lokal, bukan Drive")
+    q.add_argument("--paksa", action="store_true", help="olah ulang walau isi folder Drive tidak berubah")
+    q.set_defaults(f=cmd_areal_terbakar)
 
     q = sp.add_parser("drive-auth", help="sekali saja: dapatkan refresh token Google Drive")
     q.add_argument("--client-id", required=True), q.add_argument("--client-secret", required=True)

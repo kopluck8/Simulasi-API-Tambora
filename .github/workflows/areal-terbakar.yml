@@ -1,0 +1,51 @@
+name: Areal terbakar (delineasi manual)
+
+# Membaca SHP delineasi manual di folder Drive "delineasi" (di dalam folder Simulasi API Tambora),
+# lalu memperbarui docs/status/areal_terbakar.json (rekap) dan docs/data/areal_terbakar.geojson (peta).
+# Dicek setiap jam; hanya mengolah dan meng-commit bila isi folder berubah.
+# Jalankan manual dari tab Actions untuk memperbarui saat itu juga.
+on:
+  schedule:
+    - cron: "25 * * * *"
+  workflow_dispatch:
+    inputs:
+      paksa:
+        description: "Olah ulang walau isi folder Drive tidak berubah"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: areal-terbakar
+  cancel-in-progress: false
+
+jobs:
+  olah:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      GDRIVE_TOKEN_URL: ${{ secrets.GDRIVE_TOKEN_URL }}
+      GDRIVE_KUNCI: ${{ secrets.GDRIVE_KUNCI }}
+      GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+      GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy pyshp shapely pyproj requests
+      - name: Olah delineasi dari Drive
+        run: python -m tamborafire areal-terbakar ${{ inputs.paksa && '--paksa' || '' }}
+      - name: Catat di repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/status/areal_terbakar.json docs/data/areal_terbakar.geojson 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Tidak ada perubahan."; exit 0; fi
+          git commit -m "Update areal terbakar $(python -c "import json;print(json.load(open('docs/status/areal_terbakar.json')).get('tanggal') or 'kosong')")"
+          git pull --rebase -q origin main && git push
