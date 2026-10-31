@@ -73,5 +73,5 @@ tn = "docs/data/batas_tn.geojson"           # batas kawasan untuk luas areal ter
 # Delineasi manual areal terbakar di folder Drive 'delineasi' -> docs/status/areal_terbakar.json dan peta_terbakar.html
 mode = "gabung"               # "gabung": semua delineasi sejak awal musim digabung; file boleh kumulatif atau hanya areal baru
                               # "terbaru": file tanggal terakhir dianggap seluruh areal terbakar musim ini (koreksi ikut terpakai)
-awal_musim = "06-01"          # delineasi sebelum tanggal ini (tahun berjalan) diabaikan
+awal_musim = "02-20"          # awal musim kebakaran (kebakaran pertama 2026 tercatat 20 Feb); delineasi sebelum tanggal ini diabaikan
 luas_min_ha = 0.01            # potongan poligon lebih kecil dari ini tidak digambar di peta

@@ -538,6 +538,9 @@ def cmd_areal_terbakar(args, cfg):
         except ValueError:
             lama = {}
     kerja = os.path.join(args.kerja, "delineasi")
+    mmdd = k.get("awal_musim", cfg["mingguan"]["awal_musim"])
+    mode = k.get("mode", "gabung")
+    luas_min = float(k.get("luas_min_ha", 0.01))
     if args.lokal:
         sets, sidik = D.kumpulan_lokal(args.lokal), None
     else:
@@ -545,7 +548,7 @@ def cmd_areal_terbakar(args, cfg):
         drive = Drive()
         fid = drive.path(cfg["drive"].get("delineasi", "delineasi"), cfg["drive"]["folder_id"])
         files = D.daftar_drive(drive, fid)
-        sidik = D.sidik(files)
+        sidik = D.sidik(files, f"{mmdd}|{mode}|{luas_min}")
         print(f"folder delineasi: {len(files)} file, sidik {sidik}")
         if sidik == lama.get("sidik") and not args.paksa:
             print("Tidak ada perubahan di folder delineasi.")
@@ -554,8 +557,7 @@ def cmd_areal_terbakar(args, cfg):
         shutil.rmtree(kerja, ignore_errors=True)
         sets = D.unduh_drive(drive, files, kerja)
     hasil, gj = D.olah(sets, _rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), _rel(cfg["kawasan"]["resort"]),
-                       k.get("awal_musim", cfg["mingguan"]["awal_musim"]), k.get("mode", "gabung"),
-                       float(k.get("luas_min_ha", 0.01)))
+                       mmdd, mode, luas_min)
     hasil.update(sidik=sidik, diperbarui=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat())
     D.tulis(hasil, gj, args.status, args.geojson)
     for p in hasil["peringatan"]:

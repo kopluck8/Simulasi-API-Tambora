@@ -25,7 +25,9 @@ Sistem koordinat bebas (UTM 50S, WGS84, dan lainnya) asalkan ada `.prj`. Hanya p
 - File boleh berisi **seluruh areal terbakar sampai tanggal itu** atau **hanya areal baru** sejak delineasi
   sebelumnya. Semua delineasi sejak awal musim digabung, jadi bagian yang tumpang tindih tidak terhitung dua kali.
 - Luas dihitung di UTM 50S. Yang di luar batas TN dicatat terpisah ("di luar kawasan").
-- Delineasi sebelum awal musim (1 Juni) diabaikan, sehingga musim baru mulai dari nol tanpa perlu menghapus file lama.
+- Delineasi sebelum awal musim (20 Februari, kebakaran pertama 2026) diabaikan, sehingga musim baru mulai dari nol tanpa
+  perlu menghapus file lama. Tanggalnya diatur di `awal_musim` bagian `[delineasi]` di
+  [`config/tambora.toml`](../config/tambora.toml); setelah diubah, rekap dihitung ulang otomatis.
 - Untuk memperbaiki delineasi: ganti atau hapus file yang salah. Bila tiap file selalu kumulatif dan koreksi yang
   memperkecil areal harus ikut terpakai, ubah `mode = "terbaru"` di [`config/tambora.toml`](../config/tambora.toml).
 

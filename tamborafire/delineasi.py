@@ -225,9 +225,12 @@ def daftar_drive(drive, folder_id, kedalaman=3, sub=""):
     return out
 
 
-def sidik(files):
+def sidik(files, pengaturan=""):
+    """Sidik isi folder + pengaturan olah; berubah bila ada file berubah atau pengaturan [delineasi] diganti."""
     s = sorted(f"{f.get('subfolder', '')}/{f['name']}|{f.get('md5Checksum', '')}|{f.get('modifiedTime', '')}"
                for f in files if os.path.splitext(f["name"])[1].lower() in SHP_PART + (".zip", ".geojson", ".json"))
+    if pengaturan:
+        s.append("#" + pengaturan)
     return hashlib.sha1("\n".join(s).encode()).hexdigest()[:16]
 
 

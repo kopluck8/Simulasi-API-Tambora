@@ -69,3 +69,14 @@ def test_mode_terbaru_memakai_koreksi(tmp_path):
 def test_folder_kosong(tmp_path):
     hasil, gj = D.olah(D.kumpulan_lokal(str(tmp_path)), TN, RESORT)
     assert hasil["jumlah_delineasi"] == 0 and hasil["terbakar_ha"] == 0 and gj["features"] == []
+
+
+def test_awal_musim_februari():
+    assert D.awal_musim(dt.date(2026, 10, 30), "02-20") == dt.date(2026, 2, 20)
+    assert D.awal_musim(dt.date(2026, 2, 19), "02-20") == dt.date(2025, 2, 20)
+
+
+def test_sidik_ikut_pengaturan():
+    f = [{"name": "delineasi_2026-10-30.zip", "md5Checksum": "a", "modifiedTime": "t"}]
+    assert D.sidik(f) == D.sidik(f, "")
+    assert D.sidik(f, "06-01|gabung|0.01") != D.sidik(f, "02-20|gabung|0.01")
