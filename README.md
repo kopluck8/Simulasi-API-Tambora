@@ -133,6 +133,14 @@ Bisa juga dari tab Actions → **Simulasi api** → *Run workflow*. Hasil diterb
 
 Di baris perintah, metode api tajuk dipilih dengan `--tajuk finney|scott|tanpa` (bawaan `finney`).
 
+## Simulasi 3D
+
+Tab **Simulasi 3D** di dashboard memutar rambatan api di atas medan 3D (three.js): tombol putar/jeda, penggeser waktu maju-mundur, jam WITA, label jam di muka api, garis waktu (isokron), dan data per jam (luas terbakar, pertambahan luas, laju api/ROS di muka api, kemajuan kepala api, panjang nyala, intensitas, tipe api, cuaca per jam yang dipakai simulasi). Alat lain: warna menurut waktu tiba / ROS / panjang nyala / intensitas / tipe api, peta dasar ketinggian / bahan bakar / citra satelit, pembesaran tinggi, kontur, grid 1 km, jalur patroli, batas resort, arah dan tinggi matahari, kamera, info titik, ukur jarak dan laju api antara dua titik, tangkapan layar, layar penuh. Simulasi dipilih dari Riwayat (tombol **3D**).
+
+- Simulasi dengan `--web` menulis `data3d.bin.gz` (elevasi, bahan bakar, waktu tiba, ROS, nyala, intensitas, tipe api, cuaca per jam; dipotong di sekitar area terbakar, maks 1024 sel per sisi). Format: `tamborafire/tiga_d.py`.
+- Workflow **Simulasi api** menyimpannya ke cabang `hasil-3d` (`sim/<id>/data3d.bin.gz`); halaman membacanya dari raw.githubusercontent.com.
+- Simulasi lama: workflow **Data 3D** (Actions → *Run workflow*) membuat datanya dari `hasil.zip` di Release + landscape terbaru di Drive (`tambora isi-3d`).
+
 ## Struktur kode
 
 | File | Isi |
@@ -146,6 +154,7 @@ Di baris perintah, metode api tajuk dipilih dengan `--tajuk finney|scott|tanpa` 
 | `tamborafire/landscape.py`, `sentinel2.py` | landscape dasar dan update tiap citra baru, statistik per resort |
 | `docs/` | dashboard GitHub Pages (`index.html`, `assets/`), lapisan peta `data/*.geojson` |
 | `tamborafire/drive.py` | Google Drive (OAuth / service account) |
+| `tamborafire/tiga_d.py`, `docs/assets/tiga_d.js` | data dan tampilan tab Simulasi 3D |
 | `tamborafire/delineasi.py` | delineasi manual areal terbakar dari Drive → rekap per resort + GeoJSON (`docs/peta_terbakar.html`) |
 | `tamborafire/lcp.py` | baca/tulis .lcp (header 7316 byte) |
 | `tests/` | uji terhadap angka flammap.dll dan bekas terbakar 9 Sep |

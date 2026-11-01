@@ -45,4 +45,6 @@ Buka `https://kopluck8.github.io/Simulasi-API-Tambora/`, tab **Simulasi**.
 
 Semua simulasi tersimpan di tab **Riwayat** (dari GitHub Releases repo) dan juga di folder `simulasi/` Google Drive.
 
+7. Tombol **3D** di Riwayat (atau tautan **Lihat dalam 3D** di hasil) membuka tab **Simulasi 3D**: tekan **Putar** untuk melihat api merambat, geser penggeser waktu maju-mundur, dan lihat pukul berapa api sampai di tiap tempat. Simulasi baru otomatis punya data 3D; untuk simulasi lama jalankan sekali workflow **Data 3D** di tab Actions.
+
 Batasan: satu simulasi per menit, titik api harus di dalam AOI Tambora, lama maksimal 72 jam.

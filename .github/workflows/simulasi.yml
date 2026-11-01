@@ -150,6 +150,11 @@ jobs:
           PY
           gh release create "sim-$ID" --prerelease --title "Simulasi $IN_MODE $IN_TITIK ($ID)" \
             --notes-file "$OUT/catatan.md" "$OUT/overlay.png" "$OUT/peta_waktu_tiba.png" "$OUT/hasil.zip" "$OUT/web.json"
+      - name: Simpan data 3D (tab Simulasi 3D, cabang hasil-3d)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m tamborafire terbitkan-3d "$OUT/data3d.bin.gz" --id "$ID"
       - name: Simpan ke Google Drive
         if: env.GDRIVE_FOLDER_ID != ''
         run: python -m tamborafire unggah "$OUT" --ke "simulasi/$(basename $OUT)"

@@ -8,6 +8,12 @@
 <link rel="icon" href="assets/ikon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="assets/app.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
 <header class="kepala">
@@ -22,6 +28,7 @@
   <nav class="tab-bar" role="tablist" aria-label="Menu">
     <button class="tab" role="tab" data-tab="ringkasan" aria-selected="true">Ringkasan</button>
     <button class="tab" role="tab" data-tab="simulasi" aria-selected="false">Simulasi</button>
+    <button class="tab" role="tab" data-tab="tiga" aria-selected="false">Simulasi 3D</button>
     <button class="tab" role="tab" data-tab="riwayat" aria-selected="false">Riwayat</button>
     <button class="tab" role="tab" data-tab="landscape" aria-selected="false">Landscape</button>
     <button class="tab" role="tab" data-tab="panduan" aria-selected="false">Panduan</button>
@@ -129,6 +136,136 @@
     </div>
   </section>
 
+  <!-- 3D -->
+  <section class="panel" id="panel-tiga" role="tabpanel" hidden>
+    <div class="kartu t3-pilih">
+      <div class="t3-pilih-isi">
+        <label for="t3Pilih">Simulasi dari riwayat</label>
+        <select id="t3Pilih"><option value="">Memuat riwayat…</option></select>
+      </div>
+      <div class="aksi-baris">
+        <button class="garis kecil" id="t3Foto">Tangkapan layar</button>
+        <button class="garis kecil" id="t3Penuh">Layar penuh</button>
+        <button class="garis kecil" id="t3Peta2d">Lihat di peta 2D</button>
+      </div>
+    </div>
+    <div class="t3">
+      <div class="t3-utama" id="t3Utama">
+        <div class="t3-wadah">
+          <div class="t3-kanvas" id="t3Kanvas" aria-label="Tampilan 3D rambatan api"></div>
+          <div class="t3-jam" id="t3Jam" aria-live="off"></div>
+          <div class="t3-kompas" title="Utara dan arah angin (panah menunjuk ke arah angin bertiup)">
+            <div class="mawar" id="t3Mawar">
+              <svg viewBox="0 0 100 100" width="88" height="88" aria-hidden="true">
+                <circle cx="50" cy="50" r="44" fill="rgba(10,14,12,.55)" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+                <g fill="#fff" font-size="12" font-weight="700" text-anchor="middle" font-family="system-ui,sans-serif">
+                  <text x="50" y="17">U</text><text x="87" y="54">T</text><text x="50" y="92">S</text><text x="13" y="54">B</text></g>
+                <path d="M50 21l4 8h-8z" fill="#ff5a3c"/>
+              </svg>
+              <div class="panah-angin" id="t3Angin"><svg viewBox="0 0 100 100" width="88" height="88" aria-hidden="true">
+                <path d="M50 76V36" stroke="#7fe3ff" stroke-width="5" stroke-linecap="round"/><path d="M50 22l-10 17h20z" fill="#7fe3ff"/></svg></div>
+            </div>
+            <span id="t3KompasTeks"></span>
+          </div>
+          <div class="t3-legenda" id="t3Legenda"></div>
+          <div class="t3-atribusi" id="t3Atribusi"></div>
+          <div class="t3-mode-ukur" id="t3ModeUkur" hidden>Mode ukur: klik titik A lalu titik B di medan</div>
+          <div class="t3-catatan" id="t3Catatan" hidden></div>
+          <div class="t3-pesan" id="t3Pesan">Buka tab ini untuk memuat simulasi.</div>
+        </div>
+        <div class="t3-waktu">
+          <div class="t3-tombol">
+            <button class="ikon" id="t3Awal" title="Ke awal (Home)" aria-label="Ke awal"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 5h2.5v14H6zM19 5v14L9.5 12z" fill="currentColor"/></svg></button>
+            <button class="ikon" id="t3Mundur" title="Mundur ke jam bulat sebelumnya (PageDown)" aria-label="Mundur satu jam"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M11.5 6v12L3 12zM21 6v12l-8.5-6z" fill="currentColor"/></svg></button>
+            <button class="ikon besar" id="t3Putar" title="Putar / jeda (spasi)" aria-pressed="false"></button>
+            <button class="ikon" id="t3Maju" title="Maju ke jam bulat berikutnya (PageUp)" aria-label="Maju satu jam"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12.5 6v12l8.5-6zM3 6v12l8.5-6z" fill="currentColor"/></svg></button>
+            <button class="ikon" id="t3Akhir" title="Ke akhir (End)" aria-label="Ke akhir"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15.5 5H18v14h-2.5zM5 5v14l9.5-7z" fill="currentColor"/></svg></button>
+          </div>
+          <div class="t3-geser">
+            <canvas id="t3Grafik" aria-hidden="true"></canvas>
+            <div class="t3-tip" id="t3Tip" hidden></div>
+            <input type="range" id="t3Geser" min="0" max="1440" step="1" value="0" aria-label="Waktu simulasi (geser maju-mundur)">
+            <div class="t3-skala" id="t3Skala"></div>
+          </div>
+          <div class="t3-laju">
+            <label for="t3Laju">Kecepatan putar</label>
+            <select id="t3Laju">
+              <option value="10">10 menit / detik</option>
+              <option value="30">30 menit / detik</option>
+              <option value="60" selected>1 jam / detik</option>
+              <option value="120">2 jam / detik</option>
+              <option value="240">4 jam / detik</option>
+            </select>
+            <label class="cek"><input type="checkbox" id="t3Ulang" checked> Ulang terus</label>
+          </div>
+        </div>
+      </div>
+      <aside class="t3-samping">
+        <div class="kartu">
+          <h2>Kondisi pukul <span id="t3DataJam">–</span></h2>
+          <div class="t3-statistik" id="t3Stat"></div>
+          <div class="t3-cuaca" id="t3Cuaca"></div>
+        </div>
+        <div class="kartu t3-alat">
+          <h2>Alat</h2>
+          <details open><summary>Tampilan api</summary>
+            <label for="t3Lapis">Data yang diwarnai</label>
+            <select id="t3Lapis">
+              <option value="tiba">Waktu tiba api (pukul)</option>
+              <option value="ros">Laju api / ROS (m/menit)</option>
+              <option value="nyala">Panjang nyala (m)</option>
+              <option value="fli">Intensitas garis api (kW/m)</option>
+              <option value="tipe">Tipe api (permukaan / tajuk)</option>
+            </select>
+            <label class="cek"><input type="checkbox" id="t3Muka" checked> Muka api menyala</label>
+            <label class="cek"><input type="checkbox" id="t3Kepala" checked> Label jam di muka api</label>
+            <div class="cek-baris"><label class="cek"><input type="checkbox" id="t3Iso" checked> Garis waktu tiap</label>
+              <select id="t3IsoJam" aria-label="Interval garis waktu"><option value="1">1 jam</option><option value="2">2 jam</option><option value="3">3 jam</option><option value="6">6 jam</option></select></div>
+            <label class="cek"><input type="checkbox" id="t3Bayang"> Bayangan luas akhir</label>
+            <label for="t3Opas">Kepekatan warna api</label>
+            <input type="range" id="t3Opas" min="0.3" max="1" step="0.05" value="0.85">
+          </details>
+          <details open><summary>Medan dan peta dasar</summary>
+            <label for="t3Dasar">Peta dasar</label>
+            <select id="t3Dasar"><option value="hipso">Ketinggian (hipsometrik)</option><option value="fuel">Bahan bakar (fuel model)</option><option value="citra">Citra satelit</option></select>
+            <label for="t3Exag">Pembesaran tinggi <b id="t3ExagNilai">×1,5</b></label>
+            <input type="range" id="t3Exag" min="1" max="4" step="0.1" value="1.5">
+            <div class="cek-baris"><label class="cek"><input type="checkbox" id="t3Kontur" checked> Kontur tiap</label>
+              <select id="t3KonturM" aria-label="Interval kontur"><option value="10">10 m</option><option value="25" selected>25 m</option><option value="50">50 m</option><option value="100">100 m</option></select></div>
+            <label class="cek"><input type="checkbox" id="t3Grid"> Grid 1 km (UTM)</label>
+            <label class="cek"><input type="checkbox" id="t3Jalur" checked> Jalur patroli dan jalan</label>
+            <label class="cek"><input type="checkbox" id="t3Batas" checked> Batas TN dan resort</label>
+            <label class="cek"><input type="checkbox" id="t3Label" checked> Label (titik api, puncak, resort)</label>
+            <label for="t3Detail">Detail medan</label>
+            <select id="t3Detail"><option value="256">Ringan (HP lama)</option><option value="512" selected>Sedang</option><option value="1024">Tinggi</option></select>
+          </details>
+          <details><summary>Cahaya dan kamera</summary>
+            <label for="t3Azimut">Arah matahari</label><input type="range" id="t3Azimut" min="0" max="360" step="5" value="300">
+            <label for="t3Elevasi">Tinggi matahari</label><input type="range" id="t3Elevasi" min="5" max="85" step="1" value="38">
+            <label class="cek"><input type="checkbox" id="t3Bayangan" checked> Bayangan medan</label>
+            <label class="cek"><input type="checkbox" id="t3Kabut" checked> Kabut jarak jauh</label>
+            <label class="cek"><input type="checkbox" id="t3Bloom" checked> Efek cahaya api</label>
+            <label class="cek"><input type="checkbox" id="t3Putar360"> Putar kamera otomatis</label>
+            <div class="aksi-baris t3-kamera">
+              <button class="garis kecil" data-kamera="miring">Miring</button>
+              <button class="garis kecil" data-kamera="atas">Dari atas</button>
+              <button class="garis kecil" data-kamera="angin">Searah angin</button>
+              <button class="garis kecil" data-kamera="api">Dekat api</button>
+            </div>
+            <p class="petunjuk">Seret untuk memutar, klik kanan atau dua jari untuk menggeser, gulir atau cubit untuk zoom.</p>
+          </details>
+          <details><summary>Ukur jarak dan laju api</summary>
+            <p class="petunjuk">Klik dua titik di medan. Hasilnya jarak, beda tinggi, waktu api tiba di kedua titik, dan laju rata-rata api di antaranya.</p>
+            <button class="garis kecil" id="t3Ukur">Mulai ukur</button>
+            <div id="t3HasilUkur" class="tw"></div>
+          </details>
+        </div>
+        <div class="kartu" id="t3InfoKartu"><h2>Info titik</h2><div id="t3Info" class="tw"><p class="muted small">Klik medan 3D untuk melihat waktu tiba api, laju api, dan data lain di titik itu.</p></div></div>
+        <div class="kartu"><h2>Ringkasan simulasi</h2><div class="tw" id="t3Ringkas"></div></div>
+      </aside>
+    </div>
+  </section>
+
   <!-- RIWAYAT -->
   <section class="panel" id="panel-riwayat" role="tabpanel" hidden>
     <div class="kartu">
@@ -168,7 +305,17 @@
         <li>Pilih mode: <b>FARSITE</b> (angin dan cuaca berubah tiap jam) atau <b>MTT</b> (angin tetap; kecepatan dan arah diisi otomatis dari cuaca jam mulai dan boleh diubah).</li>
         <li>Pilih <b>Crown Fire Calculation Method</b>: Finney (1998) atau Scott/Reinhardt (2001), sama seperti di FlamMap.</li>
         <li>Klik <b>Jalankan simulasi</b>. Simulasi berjalan di GitHub Actions, biasanya 2–20 menit. Hasilnya tampil di peta dan bisa diunduh (GeoTIFF waktu tiba, perimeter shapefile, PNG).</li>
+        <li>Buka tab <b>Simulasi 3D</b> (atau tombol <b>3D</b> di Riwayat) untuk memutar rambatan api di atas medan 3D.</li>
       </ol>
+      <h3>Simulasi 3D</h3>
+      <ul>
+        <li><b>Putar / jeda</b> (spasi) memutar rambatan api. <b>Penggeser waktu</b> di bawah medan bisa digeser maju-mundur; grafik di atasnya menunjukkan luas terbakar dan bisa diklik untuk lompat ke jam tertentu. Tombol di sebelah kiri penggeser melompat ke awal, ke jam bulat sebelumnya, ke jam bulat berikutnya, dan ke akhir. Panah kiri/kanan menggeser 10 menit (dengan Shift 1 jam).</li>
+        <li>Jam besar di pojok kiri atas = pukul berapa (WITA) pada saat itu. Label jam di medan menandai posisi kepala api tiap jam bulat; garis putih = garis waktu (isokron) tiap 1, 2, 3, atau 6 jam.</li>
+        <li>Panel <b>Kondisi pukul …</b>: luas terbakar, pertambahan luas per jam, laju api (ROS) di muka api, kemajuan kepala api dan arahnya, panjang nyala, intensitas, tipe api, dan cuaca per jam yang dipakai simulasi.</li>
+        <li>Pilihan warna: waktu tiba, laju api, panjang nyala, intensitas, atau tipe api. Peta dasar: ketinggian, bahan bakar, atau citra satelit.</li>
+        <li>Klik medan untuk info titik (pukul api tiba, laju, nyala, bahan bakar, lereng). Alat <b>Ukur</b> menghitung laju rata-rata api antara dua titik.</li>
+        <li>Alat 3D lain: pembesaran tinggi, kontur, grid 1 km, jalur patroli, batas resort, arah dan tinggi matahari, bayangan, kamera (miring, dari atas, searah angin, dekat api), putar otomatis, tangkapan layar, layar penuh.</li>
+      </ul>
       <h3>Sumber cuaca</h3>
       <ul>
         <li>Tanggal lebih dari 5 hari lalu: reanalisis ERA5 / ERA5-Land (arsip Open-Meteo).</li>

@@ -45,13 +45,27 @@ var KELAS = ['30', '31', '32', '33'];
 function sisaK(o) { return KELAS.reduce(function (s, k) { return s + (+((o || {})[k]) || 0); }, 0); }
 
 /* ---------- tab ---------- */
-var TABS = ['ringkasan', 'simulasi', 'riwayat', 'landscape', 'panduan'];
+var TABS = ['ringkasan', 'simulasi', 'tiga', 'riwayat', 'landscape', 'panduan'];
 function buka(tab) {
-  if (TABS.indexOf(tab) < 0) tab = 'ringkasan';
+  var bag = String(tab || '').split('/'), arg = bag[1] || '';
+  tab = bag[0];
+  if (TABS.indexOf(tab) < 0) { tab = 'ringkasan'; arg = ''; }
   document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === tab)); });
   TABS.forEach(function (t) { $('panel-' + t).hidden = t !== tab; });
-  if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+  var h = '#' + tab + (arg ? '/' + arg : '');
+  if (location.hash !== h) history.replaceState(null, '', h);
   if (tab === 'simulasi') siapkanPeta();
+  if (tab === 'tiga') buka3D(arg);
+}
+/* tab 3D dimuat hanya saat dibuka (three.js dari CDN) */
+var modul3D = null;
+function buka3D(id) {
+  if (!modul3D) modul3D = import('./tiga_d.js');
+  modul3D.then(function (m) { m.buka(id); }).catch(function (e) {
+    modul3D = null;
+    var el = $('t3Pesan'); el.hidden = false; el.className = 't3-pesan err';
+    el.textContent = 'Tampilan 3D tidak bisa dimuat (' + (e && e.message ? e.message : e) + '). Periksa koneksi internet lalu muat ulang halaman.';
+  });
 }
 document.querySelectorAll('.tab').forEach(function (b) { b.addEventListener('click', function () { buka(b.dataset.tab); }); });
 document.querySelectorAll('[data-ke]').forEach(function (b) { b.addEventListener('click', function () { buka(b.dataset.ke); window.scrollTo(0, 0); }); });
@@ -170,7 +184,7 @@ fetch('status/landscape_terbaru.json', { cache: 'no-store' }).then(function (r) 
 });
 
 /* ---------- riwayat (GitHub Release sim-*) ---------- */
-var RILIS = [];
+var RILIS = [], rilisSiap = false, pendengarRilis = [];
 function dataDari(rel) {
   var m = /```json\s*([\s\S]*?)```/.exec(rel.body || '');
   if (!m) return null;
@@ -185,8 +199,12 @@ function muatRilis() {
     return r.json();
   }).then(function (list) {
     RILIS = (list || []).filter(function (r) { return /^sim-/.test(r.tag_name || ''); });
+    rilisSiap = true;
     isiRiwayat();
+    var cb = pendengarRilis.splice(0); cb.forEach(function (f) { f(); });
   }).catch(function () {
+    rilisSiap = true;
+    var cb = pendengarRilis.splice(0); cb.forEach(function (f) { f(); });
     $('tabelRiwayat').innerHTML = '<div class="riwayat-kosong">Riwayat tidak bisa dimuat (batas API GitHub per jam). Coba lagi nanti.</div>';
     $('kpiSim').textContent = '–'; $('kpiSimSub').textContent = 'riwayat belum bisa dimuat';
   });
@@ -202,11 +220,14 @@ function isiRiwayat() {
     h += '<tr><td>' + tglID(keWITA(rel.created_at), true) + '</td><td class="kiri"><span class="lencana-mode ' + mode + '">' + mode.toUpperCase() + '</span></td><td class="kiri">' +
       esc(m.titik || '') + '</td><td class="kiri">' + esc(lok ? lok.teks : '') + '</td><td>' + (mode === 'farsite' && m.mulai ? tglID(m.mulai.replace(' ', 'T'), true) : '–') +
       '</td><td>' + angka(m.lama) + ' jam</td><td class="kiri">' + esc(NAMA_TAJUK[d.metode_tajuk] || d.metode_tajuk || '') + '</td><td><b>' + angka(d.luas_terbakar_ha) + ' ha</b></td>' +
-      '<td><button class="garis kecil" data-rilis="' + i + '">Peta</button> ' + (aset(rel, 'hasil.zip') ? '<a class="tombol garis kecil" style="padding:5px 10px;font-size:13px" href="' + aset(rel, 'hasil.zip') + '">Unduh</a>' : '') + '</td></tr>';
+      '<td><button class="garis kecil" data-rilis="' + i + '">Peta</button> <button class="garis kecil" data-tiga="' + esc(rel.tag_name.slice(4)) + '">3D</button> ' + (aset(rel, 'hasil.zip') ? '<a class="tombol garis kecil" style="padding:5px 10px;font-size:13px" href="' + aset(rel, 'hasil.zip') + '">Unduh</a>' : '') + '</td></tr>';
   });
   $('tabelRiwayat').innerHTML = h + '</table>';
   $('tabelRiwayat').querySelectorAll('[data-rilis]').forEach(function (b) {
     b.addEventListener('click', function () { buka('simulasi'); tampil(RILIS[+b.dataset.rilis]); window.scrollTo(0, 0); });
+  });
+  $('tabelRiwayat').querySelectorAll('[data-tiga]').forEach(function (b) {
+    b.addEventListener('click', function () { buka('tiga/' + b.dataset.tiga); window.scrollTo(0, 0); });
   });
 }
 $('muatUlang').addEventListener('click', muatRilis);
@@ -620,9 +641,19 @@ function tampil(rel) {
   $('ringkasHasil').innerHTML = '<table>' + baris.map(function (b) { return '<tr><td>' + b[0] + '</td><td>' + b[1] + '</td></tr>'; }).join('') + '</table>';
   $('unduhHasil').innerHTML = (aset(rel, 'hasil.zip') ? '<a href="' + aset(rel, 'hasil.zip') + '">Unduh semua (GeoTIFF, shapefile, PNG)</a>' : '') +
     (aset(rel, 'peta_waktu_tiba.png') ? '<a href="' + aset(rel, 'peta_waktu_tiba.png') + '" target="_blank" rel="noopener">Peta PNG</a>' : '') +
-    (d.run ? '<a href="' + d.run + '" target="_blank" rel="noopener">Log run</a>' : '');
+    (d.run ? '<a href="' + d.run + '" target="_blank" rel="noopener">Log run</a>' : '') +
+    '<a href="#tiga/' + esc(rel.tag_name.slice(4)) + '">Lihat dalam 3D</a>';
   $('kotakHasil').hidden = false;
 }
 
+/* untuk modul 3D (assets/tiga_d.js) */
+window.TAMBORA = {
+  repo: REPO, DATA: DATA, siapData: siapData, NAMA_FUEL: NAMA_FUEL, WARNA_FUEL: WARNA_FUEL, NAMA_TAJUK: NAMA_TAJUK,
+  angka: angka, esc: esc, tglID: tglID, keWITA: keWITA, dataDari: dataDari, lokasi: lokasi,
+  rilis: function () { return RILIS; },
+  saatRilis: function (f) { if (rilisSiap) f(); else pendengarRilis.push(f); },
+  setHash: function (h) { history.replaceState(null, '', '#' + h); },
+  tampil2d: function (rel) { buka('simulasi'); tampil(rel); window.scrollTo(0, 0); }
+};
 buka(location.hash.slice(1) || 'ringkasan');
 })();

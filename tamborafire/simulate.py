@@ -22,6 +22,7 @@ class Hasil:
     crown: np.ndarray              # 0-3
     start: dt.datetime | None = None
     info: dict = field(default_factory=dict)
+    jam: list = field(default_factory=list)   # FARSITE: cuaca & luas per jam yang benar-benar dipakai
 
 
 def _depth_lookup(models):
@@ -134,6 +135,7 @@ class Simulator:
         fi_out = np.zeros_like(ros_out)
         ct_out = np.zeros(p["fuel"].shape, np.int8)
         cur = None
+        jam = []
         act = [h for h in hours if h[2]]
         for k, (t0, t1, active) in enumerate(hours):
             if not fixed_moisture and k > 0:
@@ -155,13 +157,19 @@ class Simulator:
             burn_clock += dur
             new = np.isfinite(st.arrival()) & ~before
             ros_out[new], fl_out[new], fi_out[new], ct_out[new] = g[0][new], g[4][new], g[3][new], g[5][new]
+            ha = np.isfinite(st.arrival()).sum() * self.ls.res ** 2 / 1e4
+            m1v = None
+            grass = (p["fuel"] >= 30) & (p["fuel"] <= 33)
+            if fixed_moisture:
+                f = self.fms.get(30, self.fms.get(0))
+                m1v = float(f[0]) if f else None
+            elif grass.any():
+                m1v = float(np.median(moist.m[0][grass]))
+            jam.append(dict(t=t0.strftime("%Y-%m-%dT%H:%M"), ws=round(float(ws_u), 1), wd=round(float(wd_u) % 360, 0),
+                            suhu=round(float(rec.temp), 1), rh=round(float(rec.rh), 0), hujan=round(float(rec.pcp), 2),
+                            m1=None if m1v is None else round(m1v, 1), ha=round(float(ha), 1)))
             if log:
-                ha = np.isfinite(st.arrival()).sum() * self.ls.res ** 2 / 1e4
-                m1 = ""
-                if not fixed_moisture:
-                    grass = (p["fuel"] >= 30) & (p["fuel"] <= 33)
-                    if grass.any():
-                        m1 = f"  1-h rumput {np.median(moist.m[0][grass]):.1f}%"
+                m1 = f"  1-h rumput {m1v:.1f}%" if (m1v is not None and not fixed_moisture) else ""
                 log(f"{t0:%Y-%m-%d %H:%M}  angin {ws_u:.0f} km/j dari {wd_u:.0f}°  "
                     f"T {rec.temp:.0f}°C RH {rec.rh:.0f}%{m1}  luas {ha:,.1f} ha")
         # jam bakar -> menit dinding sejak start
@@ -174,4 +182,4 @@ class Simulator:
         wall[late] = np.nan
         return Hasil(wall, ros_out, fl_out, fi_out, ct_out, start,
                      info=dict(mode="farsite", start=str(start), end=str(end), wind=wind,
-                               burn_period=burn_period, fixed_moisture=fixed_moisture))
+                               burn_period=burn_period, fixed_moisture=fixed_moisture), jam=jam)

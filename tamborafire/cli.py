@@ -110,6 +110,11 @@ def _write_outputs(h, ls, out, args, x0, y0, step_min=60):
     _png(h, ls, os.path.join(out, "peta_waktu_tiba.png"), x0, y0, getattr(args, "validasi", None))
     if getattr(args, "web", False):
         _web_outputs(h, ls, out, summ)
+        try:
+            from .tiga_d import dari_hasil
+            dari_hasil(h, ls, summ, out)
+        except Exception as e:  # data 3D opsional; simulasi tetap dianggap berhasil
+            print("peringatan: data 3D tidak dibuat:", e)
     print(json.dumps(summ, indent=1, default=str))
     return summ
 
@@ -566,6 +571,71 @@ def cmd_areal_terbakar(args, cfg):
           f"(terakhir {hasil['tanggal']}), {len(gj['features'])} poligon -> {args.status}, {args.geojson}")
 
 
+def _token_repo():
+    tok = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY") or "kopluck8/Simulasi-API-Tambora"
+    if not tok:
+        sys.exit("perlu GH_TOKEN/GITHUB_TOKEN")
+    return tok, repo
+
+
+def cmd_terbitkan_3d(args, cfg):
+    from .tiga_d import terbitkan
+    tok, repo = _token_repo()
+    if not os.path.exists(args.file):
+        print("tidak ada", args.file, "- dilewati")
+        return
+    terbitkan(args.file, args.id, repo, tok)
+
+
+def cmd_isi_3d(args, cfg):
+    """Buat data 3D untuk simulasi lama di GitHub Release (sim-*) yang belum punya."""
+    import re
+    import requests
+    from .tiga_d import dari_folder, terbitkan, ada
+    tok, repo = _token_repo()
+    hdr = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
+    rel = requests.get(f"https://api.github.com/repos/{repo}/releases?per_page=100", headers=hdr, timeout=60).json()
+    rel = [r for r in rel if r.get("tag_name", "").startswith("sim-")]
+    if args.id:
+        rel = [r for r in rel if r["tag_name"] == "sim-" + args.id]
+    os.makedirs(args.kerja, exist_ok=True)
+    gagal = 0
+    for r in rel:
+        sid = r["tag_name"][4:]
+        if not args.ulang and ada(repo, sid, tok):
+            print(sid, "sudah ada")
+            continue
+        m = re.search(r"```json\s*(.*?)```", r.get("body") or "", re.S)
+        web = json.loads(m.group(1)) if m else {}
+        mas = web.get("masukan") or {}
+        lcp = _rel(cfg["simulasi"].get("lcp_contoh", "contoh/piong_9sep/landscape_prakebakaran_9sep_30m.lcp")) \
+            if mas.get("ls") == "contoh" else args.lcp
+        aset = {a["name"]: a["browser_download_url"] for a in r.get("assets", [])}
+        if "hasil.zip" not in aset or not os.path.exists(lcp):
+            print(sid, "dilewati: hasil.zip atau landscape tidak ada")
+            continue
+        zp = os.path.join(args.kerja, f"{sid}.zip")
+        with requests.get(aset["hasil.zip"], timeout=300, stream=True) as q:
+            q.raise_for_status()
+            with open(zp, "wb") as f:
+                for b in q.iter_content(1 << 20):
+                    f.write(b)
+        cat = None if mas.get("ls") == "contoh" else "elevasi & bahan bakar dari landscape terbaru saat data 3D dibuat"
+        try:
+            data = dari_folder(zp, lcp, web, mas, cat)
+        except Exception as e:
+            print(sid, "gagal:", e)
+            gagal += 1
+            continue
+        out = os.path.join(args.kerja, f"{sid}.bin.gz")
+        open(out, "wb").write(data)
+        print(sid, f"{len(data) / 1e6:.2f} MB")
+        terbitkan(out, sid, repo, tok)
+    if gagal:
+        sys.exit(f"{gagal} simulasi gagal dibuat data 3D-nya")
+
+
 def cmd_drive_auth(args, cfg):
     from .drive import authorize_interactive
     tok = authorize_interactive(args.client_id, args.client_secret)
@@ -670,6 +740,17 @@ def main(argv=None):
     q.add_argument("--lokal", help="uji: baca folder lokal, bukan Drive")
     q.add_argument("--paksa", action="store_true", help="olah ulang walau isi folder Drive tidak berubah")
     q.set_defaults(f=cmd_areal_terbakar)
+
+    q = sp.add_parser("terbitkan-3d", help="simpan data3d.bin.gz ke cabang hasil-3d (tab 3D halaman simulasi)")
+    q.add_argument("file"), q.add_argument("--id", required=True)
+    q.set_defaults(f=cmd_terbitkan_3d)
+
+    q = sp.add_parser("isi-3d", help="buat data 3D untuk simulasi lama di GitHub Release")
+    q.add_argument("--lcp", default="kerja/terbaru/landscape_terbaru_10m.lcp", help="landscape untuk elevasi & fuel")
+    q.add_argument("--id", help="satu simulasi saja (tanpa awalan sim-)")
+    q.add_argument("--ulang", action="store_true", help="buat ulang walau sudah ada")
+    q.add_argument("--kerja", default="kerja/isi3d")
+    q.set_defaults(f=cmd_isi_3d)
 
     q = sp.add_parser("drive-auth", help="sekali saja: dapatkan refresh token Google Drive")
     q.add_argument("--client-id", required=True), q.add_argument("--client-secret", required=True)

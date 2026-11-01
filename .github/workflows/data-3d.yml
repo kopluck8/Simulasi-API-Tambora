@@ -1,0 +1,56 @@
+name: Data 3D
+run-name: "Data 3D ${{ inputs.id || 'semua simulasi lama' }}"
+
+# Membuat data tab "Simulasi 3D" untuk simulasi di Riwayat yang belum punya.
+# Simulasi baru sudah otomatis membuat data 3D (workflow Simulasi api); ini untuk simulasi lama
+# atau bila data 3D sebuah simulasi perlu dibuat ulang.
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "ID simulasi (tanpa 'sim-'); kosong = semua yang belum punya data 3D"
+        required: false
+        default: ""
+      ulang:
+        description: "Buat ulang walau sudah ada"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-3d
+  cancel-in-progress: false
+
+jobs:
+  buat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      GDRIVE_TOKEN_URL: ${{ secrets.GDRIVE_TOKEN_URL }}
+      GDRIVE_KUNCI: ${{ secrets.GDRIVE_KUNCI }}
+      GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+      GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[serviceaccount]"
+      - name: Ambil landscape terbaru (elevasi dan bahan bakar)
+        run: python -m tamborafire ambil-landscape --out kerja/terbaru
+      - name: Buat dan simpan data 3D
+        env:
+          IN_ID: ${{ inputs.id }}
+          IN_ULANG: ${{ inputs.ulang }}
+        run: |
+          ARGS="--lcp kerja/terbaru/landscape_terbaru_10m.lcp"
+          [ -n "$IN_ID" ] && ARGS="$ARGS --id $IN_ID"
+          [ "$IN_ULANG" = "true" ] && ARGS="$ARGS --ulang"
+          python -m tamborafire isi-3d $ARGS
