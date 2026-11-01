@@ -255,7 +255,9 @@ function olah(h, L, rel) {
     h, rel, d, mas, mode, nx, ny, N, sel, elev, tiba, ros, nyala, fli, tipe, fuel, nb, urut, tUrut, dMaks, dArg, kum,
     elevMin: emin, elevMaks: emax, puncak: imax, dur, t0, jamAsumsi: mode !== 'farsite', jam,
     batas: { ros: Math.max(1, persentil(ros, urut, 0.98)), nyala: Math.max(0.5, persentil(nyala, urut, 0.98)), fli: Math.max(50, persentil(fli, urut, 0.98)) },
-    W: nx * sel, H: ny * sel, offJam: t0 !== null ? new Date(t0).getUTCMinutes() : 0
+    W: nx * sel, H: ny * sel, offJam: t0 !== null ? new Date(t0).getUTCMinutes() : 0,
+    // luas per sel (ha), dikoreksi ke luas asli bila grid 3D diperkecil
+    cel: nb && h.luas_terbakar_ha ? h.luas_terbakar_ha / nb : sel * sel / 1e4
   };
 }
 function ub(t) { // banyak sel dengan waktu tiba <= t
@@ -699,7 +701,7 @@ function aturT(t, dariGeser) {
   if (now - S.hudTerakhir > 90 || !S.main) { S.hudTerakhir = now; hud(); }
 }
 function hud() {
-  const t = S.t, cel = D.sel * D.sel / 1e4, n = ub(t), j1 = ub(t - 60), jf = ub(t - U.uFront.value);
+  const t = S.t, cel = D.cel, n = ub(t), j1 = ub(t - 60), jf = ub(t - U.uFront.value);
   const jamT = jamPada(t);
   $('t3Jam').innerHTML = '<b>' + (jamT || 'T+' + lamaTeks(t)) + (jamT && !D.jamAsumsi ? '<i> WITA</i>' : '') + '</b><span>' +
     (jamT ? tglPada(t) : '') + '</span><small>' + (D.jamAsumsi && jamT ? 'MTT: jam dihitung dari waktu mulai yang diisi · ' : '') + lamaTeks(t) + ' sejak api mulai</small>';
@@ -749,7 +751,7 @@ function hud() {
 /* ---------- grafik waktu ---------- */
 let SERI = null;
 function seri() {
-  const n = 240, a = new Float32Array(n + 1), cel = D.sel * D.sel / 1e4;
+  const n = 240, a = new Float32Array(n + 1), cel = D.cel;
   for (let k = 0; k <= n; k++) a[k] = ub(D.dur * k / n) * cel;
   SERI = a;
 }
@@ -775,7 +777,7 @@ function gambarGrafik(hover) {
   // penunjuk waktu
   const xt = X(S.t);
   ctx.strokeStyle = fg; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xt, 0); ctx.lineTo(xt, h); ctx.stroke();
-  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(xt, Y(ub(S.t) * D.sel * D.sel / 1e4), 4, 0, 7); ctx.fill();
+  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(xt, Y(ub(S.t) * D.cel), 4, 0, 7); ctx.fill();
   ctx.fillStyle = redup; ctx.font = '11px system-ui,sans-serif'; ctx.textAlign = 'left';
   ctx.fillText('Luas terbakar · akhir ' + angka(mx) + ' ha', 4, 12);
   if (hover !== undefined) {
@@ -920,7 +922,7 @@ function pasangKendali() {
     if (seret) aturT(m);
     const tip = $('t3Tip'); tip.hidden = false;
     tip.style.left = Math.max(0, Math.min(r.width - 120, e.clientX - r.left + 8)) + 'px';
-    tip.innerHTML = '<b>' + (jamPada(m) || 'T+' + lamaTeks(m)) + '</b> · ' + angka(ub(m) * D.sel * D.sel / 1e4) + ' ha';
+    tip.innerHTML = '<b>' + (jamPada(m) || 'T+' + lamaTeks(m)) + '</b> · ' + angka(ub(m) * D.cel) + ' ha';
     gambarGrafik(e.clientX - r.left);
   });
   gr.addEventListener('pointerup', () => { seret = false; });
@@ -993,7 +995,7 @@ function foto() {
   ctx.drawImage(src, 0, 0);
   ctx.fillStyle = 'rgba(10,14,12,.72)'; ctx.fillRect(0, cv.height - 64 * s, cv.width, 64 * s);
   ctx.fillStyle = '#fff'; ctx.font = (600 * 1) + ' ' + Math.round(18 * s) + 'px system-ui,sans-serif';
-  const n = ub(S.t), ha = n * D.sel * D.sel / 1e4;
+  const n = ub(S.t), ha = n * D.cel;
   ctx.fillText('Simulasi ' + D.mode.toUpperCase() + ' · ' + waktuTeks(S.t, true) + ' · ' + angka(ha) + ' ha terbakar', 16 * s, cv.height - 36 * s);
   ctx.font = Math.round(13 * s) + 'px system-ui,sans-serif'; ctx.fillStyle = '#cfd8d3';
   ctx.fillText('TN Tambora · ' + LAPIS[$('t3Lapis').value].judul + ' · ' + lamaTeks(S.t) + ' sejak api mulai', 16 * s, cv.height - 14 * s);

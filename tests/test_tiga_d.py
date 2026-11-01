@@ -60,8 +60,9 @@ def test_perkecil_jika_terlalu_besar():
     h, a = T.baca(data)
     assert h["perkecil"] >= 2 and max(h["kolom"], h["baris"]) <= 100
     assert h["sel_m"] == 10.0 * h["perkecil"]
-    # waktu tiba blok = minimum, jadi luas terbakar tidak hilang
-    assert np.isfinite(a["tiba"]).sum() * h["sel_m"] ** 2 >= np.isfinite(arr).sum() * 100 * 0.95
+    # blok terbakar bila >= separuh selnya terbakar: luas hampir sama dengan aslinya
+    assert np.isfinite(a["tiba"]).sum() * h["sel_m"] ** 2 / 1e4 == pytest.approx(np.isfinite(arr).sum() / 100, rel=0.03)
+    assert h["luas_terbakar_ha"] == pytest.approx(np.isfinite(arr).sum() / 100, abs=0.06)
 
 
 def test_tanpa_area_terbakar():

@@ -58,9 +58,10 @@ def _blok(a, f, cara):
         return a
     ny, nx = a.shape[0] // f, a.shape[1] // f
     b = a[:ny * f, :nx * f].reshape(ny, f, nx, f)
-    if cara == "min":       # waktu tiba: sel tercepat di blok (luas terbakar tidak hilang)
-        x = np.where(np.isfinite(b), b, np.inf).min(axis=(1, 3))
-        return np.where(np.isfinite(x), x, np.nan)
+    if cara == "min":       # waktu tiba: sel tercepat di blok, bila >= separuh blok terbakar (luas tidak bias)
+        ok = np.isfinite(b)
+        x = np.where(ok, b, np.inf).min(axis=(1, 3))
+        return np.where(np.isfinite(x) & (ok.sum(axis=(1, 3)) * 2 >= f * f), x, np.nan)
     if cara == "max":
         return b.max(axis=(1, 3))
     if cara == "mean":
@@ -152,13 +153,14 @@ def bangun(arrival, ros, flame, fli, crown, elev, fuel, west, north, res, crs, i
         tambah("fuel", np.clip(fu, 0, 65535).astype(np.uint16), "u16")
 
     tmax = float(np.nanmax(lar["tiba"])) if burned.any() else 0.0
+    luas_asli = float(np.isfinite(arrival).sum() * res ** 2 / 1e4)
     head = dict(
         versi=VERSI, dibuat=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         kolom=nx, baris=ny, sel_m=res2, sel_asli_m=res, perkecil=f,
         utm=dict(barat=w2, utara=n2, crs=crs if (crs or "").startswith("EPSG") else None),
         elev_min=round(elev_lo, 1), elev_maks=round(elev_hi, 1),
         titik_api=[round((ign_xy[0] - w2) / res2, 2), round((n2 - ign_xy[1]) / res2, 2)],
-        menit_maks=round(tmax, 1), luas_terbakar_ha=round(float(burned.sum() * res2 ** 2 / 1e4), 1),
+        menit_maks=round(tmax, 1), luas_terbakar_ha=round(luas_asli, 1),
         larik=larik, **_geo(w2, n2, res2, ny, nx, crs))
     head.update(meta or {})
     hj = json.dumps(head, default=str, separators=(",", ":")).encode()
