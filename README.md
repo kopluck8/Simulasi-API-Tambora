@@ -6,7 +6,8 @@ Pendamping FlamMap/FARSITE untuk savana TN Gunung Tambora. Repo ini berisi:
 - **Angin di atas medan**: memakai WindNinja bila `WindNinja_cli` terpasang. Kalau tidak ada, dipakai model medan bawaan (MicroMet).
 - **Cuaca**: unduh data per jam ERA5 / ECMWF lewat Open-Meteo dan tulis `.wxs`. Ini port dari pembuat WXS yang sudah dipakai (`docs/pembuat_wxs.html`).
 - **Landscape otomatis**: GitHub Actions mengecek katalog Sentinel-2 dua kali sehari dan, setiap ada citra baru (±tiap 2–5 hari), menandai bekas terbakar baru, menulis `.lcp` 10 m, lalu menyimpannya ke **Google Drive** Anda.
-- **Dashboard GitHub Pages** (`docs/index.html`): tab Ringkasan, Simulasi (peta dengan batas TN, resort, jalur patroli, grid 1 km; cuaca .wxs dibuat langsung dari tanggal dan jam kejadian), Riwayat, Landscape, Panduan.
+- **Dashboard GitHub Pages** (`docs/index.html`): tab Ringkasan, Simulasi (peta dengan batas TN, resort, jalur patroli, grid 1 km; cuaca .wxs dibuat langsung dari tanggal dan jam kejadian), Simulasi 3D, Asal Api, Riwayat, Landscape, Panduan.
+- **Pemodelan terbalik (Asal Api)**: dari titik panas satelit dan areal terbakar, dicari titik asal, jam mulai, dan arah datang api tiap kejadian, jam rawan pembakaran, serta faktor koreksi laju api untuk kalibrasi fmd20.
 - **Fuel terkalibrasi**: `kalibrasi/tambora_savana_cepat20.fmd` (fmd20) + `kalibrasi/tambora_latihan.fms`.
 
 > Status: alat latihan/kalibrasi. Kelas K1–K4 masih kelas relatif dari NDVI, belum dari biomassa plot survei.
@@ -141,6 +142,24 @@ Tab **Simulasi 3D** di dashboard memutar rambatan api di atas medan 3D (three.js
 - Workflow **Simulasi api** menyimpannya ke cabang `hasil-3d` (`sim/<id>/data3d.bin.gz`); halaman membacanya dari raw.githubusercontent.com.
 - Simulasi lama: workflow **Data 3D** (Actions → *Run workflow*) membuat datanya dari `hasil.zip` di Release + landscape terbaru di Drive (`tambora isi-3d`).
 
+## Asal api (pemodelan terbalik)
+
+Tab **Asal Api** menampilkan, untuk tiap kejadian kebakaran musim ini: titik asal api (zona peluang 50% dan 90%), perkiraan jam api mulai dengan selang 90%, arah datang api, tempat dan jam api masuk kawasan TN bila asalnya di luar, garis waktu rambat, serta grafik **jam rawan pembakaran** dan mawar arah datang api. Bisa disaring per bulan, mutu, resort, letak titik asal, dan luas, diunduh sebagai CSV/GeoJSON, dan tiap titik asal bisa langsung disimulasikan di tab Simulasi.
+
+Cara hitung (`tamborafire/asal.py`, perintah `tambora asal-api`):
+
+1. **Titik panas** VIIRS/MODIS disimpan di `data/titik_panas/titik_panas.geojson` (WITA). Impor KMZ/KML SiPongi atau CSV FIRMS dengan `tambora titik-panas FILE...`; workflow menambah data baru dari NASA FIRMS tiap hari (secret `FIRMS_MAP_KEY`).
+2. **Kejadian**: titik panas ≤ 1,5 km dan ≤ 36 jam, atau tersambung oleh areal terbakar, digabung. Areal terbakar delineasi (`docs/data/areal_terbakar.geojson`) dibagi ke kejadian; areal kejadian sebelumnya menjadi fuel 99.
+3. **Cuaca** ERA5/ERA5-Land per jam dari Open-Meteo di lokasi kejadian (dengan 3 hari pengkondisian kadar air), angin medan, fmd20 + fms + landscape dasar awal kemarau.
+4. **Inversi waktu tempuh**: simulasi mundur dari tiap titik panas memberi, untuk tiap sel, jam paling akhir api bisa mulai di sel itu agar sampai di piksel satelit pada jam deteksi. Kandidat terbaik disimulasikan maju (FARSITE, 7 faktor laju api k ×0,35–×2,83) dan dinilai dari kecocokan waktu (termasuk lintasan satelit tanpa deteksi sebelum deteksi pertama) dan bentuk areal (Sørensen).
+5. **Kalibrasi**: faktor k kejadian yang terlihat di ≥ 2 lintasan satelit digabung per kelas K1–K4 (regresi berbobot + bootstrap) → saran `ros_adjust`. Saran tidak diterapkan otomatis.
+
+Hasil: `docs/status/asal_api.json` (ringkasan, jam rawan, kalibrasi, tabel kejadian), `docs/data/asal_api/` (`peta.geojson`, `k/<id>.json` detail, `wxs/<id>.wxs` cuaca, `titik_panas.geojson`).
+Workflow **Asal api** (`.github/workflows/asal-api.yml`) berjalan tiap hari 06:40 WITA dan setelah ada delineasi baru; kejadian yang datanya tidak berubah tidak dihitung ulang.
+Jalankan manual dari Actions dengan pilihan `ulang` (hitung semua), `hanya` (id kejadian), atau `firms_sejak` (tambah titik panas FIRMS sejak tanggal itu).
+
+Di PC: `tambora asal-api --lcp landscape_10m.lcp --tanpa-firms` (perlu internet untuk Open-Meteo).
+
 ## Struktur kode
 
 | File | Isi |
@@ -156,6 +175,7 @@ Tab **Simulasi 3D** di dashboard memutar rambatan api di atas medan 3D (three.js
 | `tamborafire/drive.py` | Google Drive (OAuth / service account) |
 | `tamborafire/tiga_d.py`, `docs/assets/tiga_d.js` | data dan tampilan tab Simulasi 3D |
 | `tamborafire/delineasi.py` | delineasi manual areal terbakar dari Drive → rekap per resort + GeoJSON (`docs/peta_terbakar.html`) |
+| `tamborafire/asal.py`, `docs/assets/asal.js` | pemodelan terbalik titik asal dan jam mulai api, tab Asal Api |
 | `tamborafire/lcp.py` | baca/tulis .lcp (header 7316 byte) |
 | `tests/` | uji terhadap angka flammap.dll dan bekas terbakar 9 Sep |
 

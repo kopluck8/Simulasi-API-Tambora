@@ -1,0 +1,86 @@
+name: Asal api (pemodelan terbalik)
+
+# Menghitung titik dan jam api mulai tiap kejadian kebakaran dari titik panas (SiPongi + NASA FIRMS) dan areal
+# terbakar, memakai landscape awal musim, fmd/fms kalibrasi, dan cuaca per jam ERA5 / ERA5-Land dari Open-Meteo
+# (sumber yang sama dengan generator .wxs). Hasil: docs/status/asal_api.json dan docs/data/asal_api/
+# (tab "Asal Api" di halaman simulasi). Kejadian yang data dan pengaturannya tidak berubah tidak dihitung ulang.
+on:
+  schedule:
+    - cron: "40 22 * * *"      # 06:40 WITA, sesudah lintasan VIIRS malam
+  workflow_dispatch:
+    inputs:
+      ulang:
+        description: "Hitung ulang semua kejadian (abaikan hasil lama)"
+        type: boolean
+        default: false
+      hanya:
+        description: "Hanya kejadian ini (id dipisah koma, mis. K20260909-1312)"
+        required: false
+      firms_sejak:
+        description: "Ambil titik panas FIRMS sejak tanggal (YYYY-MM-DD); kosong = 3 hari sebelum titik terakhir"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: asal-api
+  cancel-in-progress: false
+
+jobs:
+  hitung:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+      GDRIVE_TOKEN_URL: ${{ secrets.GDRIVE_TOKEN_URL }}
+      GDRIVE_KUNCI: ${{ secrets.GDRIVE_KUNCI }}
+      GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+      GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+      GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+      GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+      FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[serviceaccount]"
+      - name: Simpan cache data dasar
+        uses: actions/cache@v4
+        with:
+          path: kerja/dasar
+          key: dasar-${{ hashFiles('config/tambora.toml') }}
+      - name: Unduh landscape awal musim dan bekas terbakar Sentinel-2
+        run: python -m tamborafire ambil-dasar --out kerja/dasar --bekas kerja/asal/bekas_terbakar_musim.tif
+      - name: Hitung asal api
+        env:
+          ULANG: ${{ inputs.ulang }}
+          HANYA: ${{ inputs.hanya }}
+          FIRMS_SEJAK: ${{ inputs.firms_sejak }}
+        run: |
+          ARG=()
+          if [ "$ULANG" = "true" ]; then ARG+=(--ulang); fi
+          if [ -n "$HANYA" ]; then ARG+=(--hanya "$HANYA"); fi
+          if [ -n "$FIRMS_SEJAK" ]; then ARG+=(--firms-sejak "$FIRMS_SEJAK"); fi
+          if [ -f kerja/asal/bekas_terbakar_musim.tif ]; then ARG+=(--bekas-s2 kerja/asal/bekas_terbakar_musim.tif); fi
+          python -m tamborafire asal-api --dasar kerja/dasar "${ARG[@]}"
+      - name: Simpan hasil (artefak run)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asal-api
+          path: |
+            docs/status/asal_api.json
+            docs/data/asal_api
+          retention-days: 14
+      - name: Catat di repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/status/asal_api.json docs/data/asal_api data/titik_panas 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Tidak ada perubahan."; exit 0; fi
+          git commit -q -m "Update asal api $(date -u +%Y-%m-%d)"
+          for i in 1 2 3 4; do git pull --rebase -q origin main && git push && exit 0; sleep $((i * 5)); done
+          exit 1

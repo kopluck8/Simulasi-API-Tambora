@@ -518,6 +518,32 @@ def cmd_ambil_landscape(args, cfg):
     print(os.path.join(args.out, "landscape_terbaru_10m.lcp"))
 
 
+def cmd_ambil_dasar(args, cfg):
+    """Unduh GeoTIFF dasar (landscape awal musim) dan, bila diminta, bekas terbakar Sentinel-2 terbaru dari Drive."""
+    from . import landscape as L
+    from .drive import Drive
+    d = Drive()
+    root = cfg["drive"]["folder_id"].strip()
+    if not root:
+        sys.exit("Isi drive.folder_id di config/tambora.toml atau secret GDRIVE_FOLDER_ID.")
+    isi = [f["name"] for f in d.ls(root)]
+    fid = root if cfg["dasar"]["elev"] in isi else d.path(cfg["drive"]["dasar"], root)
+    need = [cfg["dasar"][k] for k in L.LAYER_KEYS]
+    d.sync_down(fid, args.out, need)
+    kurang = [n for n in need if not os.path.exists(os.path.join(args.out, n))]
+    if kurang:
+        sys.exit("GeoTIFF dasar tidak lengkap di Drive: " + ", ".join(kurang))
+    if args.bekas:
+        f = d.find("bekas_terbakar_musim.tif", d.path(cfg["drive"]["landscape"] + "/terbaru", root))
+        if f:
+            os.makedirs(os.path.dirname(args.bekas) or ".", exist_ok=True)
+            d.download(f["id"], args.bekas)
+            print("bekas terbakar Sentinel-2:", args.bekas)
+        else:
+            print("bekas_terbakar_musim.tif belum ada di Drive landscape/terbaru")
+    print("dasar:", args.out)
+
+
 def cmd_unggah(args, cfg):
     from .drive import Drive
     d = Drive()
@@ -636,6 +662,88 @@ def cmd_isi_3d(args, cfg):
         sys.exit(f"{gagal} simulasi gagal dibuat data 3D-nya")
 
 
+def _filter_aoi(points, cfg, pad_m=3000.0):
+    from pyproj import Transformer
+    if not points:
+        return []
+    a = cfg["aoi"]
+    tf = Transformer.from_crs(4326, a["epsg"], always_xy=True)
+    x, y = tf.transform([p["lon"] for p in points], [p["lat"] for p in points])
+    return [p for p, xi, yi in zip(points, x, y)
+            if a["west"] - pad_m <= xi <= a["east"] + pad_m and a["south"] - pad_m <= yi <= a["north"] + pad_m]
+
+
+def cmd_titik_panas(args, cfg):
+    """Impor titik panas (KMZ/KML SiPongi, CSV FIRMS) ke data/titik_panas/titik_panas.geojson."""
+    from . import asal as A
+    pts, lin, meta = A.baca_hotspot(args.simpan) if os.path.exists(args.simpan) else ([], [], {})
+    for f in args.file:
+        baru = A.baca_kml(f) if f.lower().endswith((".kmz", ".kml")) else A.baca_csv(f)
+        aoi = _filter_aoi(baru, cfg)
+        n0 = len(pts)
+        pts = A.gabung(pts, aoi)
+        lin = A.gabung_lintasan(lin, A.lintasan(baru))
+        rentang = [min(p["t"] for p in baru).strftime("%Y-%m-%d %H:%M"), max(p["t"] for p in baru).strftime("%Y-%m-%d %H:%M")] if baru else None
+        meta.setdefault("impor", []).append(dict(file=os.path.basename(f), diimpor=dt.date.today().isoformat(), titik=len(baru),
+                                                 di_aoi=len(aoi), baru=len(pts) - n0, rentang_wita=rentang))
+        print(f"{f}: {len(baru)} titik, {len(aoi)} di sekitar AOI, {len(pts) - n0} baru; lintasan satelit {len(lin)}")
+    A.tulis_hotspot(pts, args.simpan, lin, meta)
+    print("ditulis", args.simpan, len(pts), "titik")
+
+
+def cmd_asal_api(args, cfg):
+    """Pemodelan terbalik: titik dan jam api mulai tiap kejadian dari titik panas + areal terbakar."""
+    from . import asal as A
+    from . import firms
+    from .lcp import read_lcp
+    pts, lin, meta = A.baca_hotspot(args.titik)
+    if not pts:
+        sys.exit("Belum ada titik panas di " + args.titik)
+    if not args.tanpa_firms and firms.key():
+        sejak = dt.date.fromisoformat(args.firms_sejak) if args.firms_sejak else max(p["t"] for p in pts).date() - dt.timedelta(days=3)
+        try:
+            baru = A.ambil_firms("115.8,-9.2,119.4,-8.0", sejak, dt.date.today())
+            n0 = len(pts)
+            pts = A.gabung(pts, _filter_aoi(baru, cfg))
+            lin = A.gabung_lintasan(lin, A.lintasan(baru))
+            meta["firms"] = dict(diperbarui=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+                                 sejak=sejak.isoformat(), titik_baru=len(pts) - n0)
+            print(f"FIRMS {sejak} s.d. hari ini: {len(baru)} titik NTB, {len(pts) - n0} baru di sekitar AOI")
+            A.tulis_hotspot(pts, args.titik, lin, meta)
+        except Exception as e:  # tanpa FIRMS tetap jalan dengan data yang ada
+            print("FIRMS gagal, pakai titik panas yang ada:", e)
+    if args.lcp:
+        ls10 = read_lcp(args.lcp)
+    else:
+        from . import landscape as L
+        lay, tr, crs = L.load_base(args.dasar, cfg)
+        ls10 = L.to_landscape(lay, tr, crs.to_wkt(), cfg, "Tambora dasar")
+    grid = A.Grid(cfg, 3 * ls10.res)
+    tn = A.raster_poligon(_rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), grid)
+    burn, binfo = A.areal_terbakar(grid, _rel(args.delineasi), tn, args.bekas_s2)
+    t_min = min(p["t"] for p in pts).date() - dt.timedelta(days=6)
+    t_max = min(max(p["t"] for p in pts).date() + dt.timedelta(days=2), dt.date.today())
+    cuaca = A.CuacaUji() if args.cuaca_uji else A.Cuaca(os.path.join(args.kerja, "cuaca"), t_min, t_max,
+                                                          cfg["simulasi"]["zona"], cfg["simulasi"]["model_cuaca"])
+    fmd, fms = _rel(cfg["kalibrasi"]["fmd"]), _rel(cfg["kalibrasi"]["fms"])
+    ra = {int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()}
+    ctx = A.Konteks(cfg, ls10, fmd, fms, ra, pts, lin, burn, tn, cuaca, root=ROOT)
+    evs, info = A.siapkan(ctx, min_ha=args.min_ha)
+    lama = {} if args.ulang else A.hasil_lama(args.status, args.keluaran)
+    hanya = set(args.hanya.split(",")) if args.hanya else None
+    hasil, gagal = A.jalankan(ctx, evs, lama, proses=args.proses, hanya=hanya)
+    src = [dict(f) for f in meta.get("impor", [])]
+    m = dict(titik_panas=dict(impor=src, firms=meta.get("firms"),
+                              rentang_wita=[min(p["t"] for p in pts).strftime("%Y-%m-%d %H:%M"),
+                                            max(p["t"] for p in pts).strftime("%Y-%m-%d %H:%M")]),
+             areal_terbakar=dict(binfo, file=os.path.relpath(_rel(args.delineasi), ROOT),
+                                 s2=os.path.basename(args.bekas_s2) if args.bekas_s2 else None),
+             cuaca="uji (buatan)" if args.cuaca_uji else "Open-Meteo ERA5 / ERA5-Land (arsip), prakiraan untuk 6 hari terakhir",
+             landscape=os.path.basename(args.lcp) if args.lcp else "GeoTIFF dasar awal kemarau (Drive/dasar)",
+             fmd=cfg["kalibrasi"]["fmd"], fms=cfg["kalibrasi"]["fms"], ros_adjust=cfg["kalibrasi"].get("ros_adjust", {}))
+    A.tulis_hasil(ctx, evs, info, hasil, gagal, args.status, args.keluaran, meta=m)
+
+
 def cmd_drive_auth(args, cfg):
     from .drive import authorize_interactive
     tok = authorize_interactive(args.client_id, args.client_secret)
@@ -729,6 +837,11 @@ def main(argv=None):
     q.add_argument("--out", default="kerja/terbaru")
     q.set_defaults(f=cmd_ambil_landscape)
 
+    q = sp.add_parser("ambil-dasar", help="unduh GeoTIFF dasar (dan bekas terbakar Sentinel-2) dari Drive")
+    q.add_argument("--out", default="kerja/dasar")
+    q.add_argument("--bekas", help="simpan juga bekas_terbakar_musim.tif ke path ini")
+    q.set_defaults(f=cmd_ambil_dasar)
+
     q = sp.add_parser("unggah", help="unggah file/folder ke Drive")
     q.add_argument("file", nargs="+"), q.add_argument("--ke", required=True, help="folder tujuan di Drive, mis. dasar")
     q.set_defaults(f=cmd_unggah)
@@ -751,6 +864,29 @@ def main(argv=None):
     q.add_argument("--ulang", action="store_true", help="buat ulang walau sudah ada")
     q.add_argument("--kerja", default="kerja/isi3d")
     q.set_defaults(f=cmd_isi_3d)
+
+    q = sp.add_parser("titik-panas", help="impor titik panas KMZ/KML SiPongi atau CSV FIRMS")
+    q.add_argument("file", nargs="+")
+    q.add_argument("--simpan", default="data/titik_panas/titik_panas.geojson")
+    q.set_defaults(f=cmd_titik_panas)
+
+    q = sp.add_parser("asal-api", help="pemodelan terbalik: titik dan jam api mulai tiap kejadian")
+    q.add_argument("--titik", default="data/titik_panas/titik_panas.geojson", help="penyimpanan titik panas")
+    q.add_argument("--dasar", default="kerja/dasar", help="folder GeoTIFF dasar (landscape awal musim)")
+    q.add_argument("--lcp", help="atau landscape .lcp 10 m awal musim (tanpa bekas terbakar)")
+    q.add_argument("--delineasi", default="docs/data/areal_terbakar.geojson")
+    q.add_argument("--bekas-s2", help="bekas_terbakar_musim.tif (Sentinel-2) untuk areal di luar kawasan TN")
+    q.add_argument("--status", default="docs/status/asal_api.json")
+    q.add_argument("--keluaran", default="docs/data/asal_api")
+    q.add_argument("--kerja", default="kerja/asal")
+    q.add_argument("--proses", type=int, default=max(1, min(4, os.cpu_count() or 1)))
+    q.add_argument("--min-ha", type=float, default=1.0, help="luas areal terbakar minimal per kejadian")
+    q.add_argument("--hanya", help="id kejadian dipisah koma (lainnya diambil dari hasil lama)")
+    q.add_argument("--ulang", action="store_true", help="hitung ulang semua kejadian (abaikan cache)")
+    q.add_argument("--tanpa-firms", action="store_true", help="jangan tambah titik panas dari FIRMS")
+    q.add_argument("--firms-sejak", help="tanggal awal pengambilan FIRMS (bawaan: 3 hari sebelum titik terakhir)")
+    q.add_argument("--cuaca-uji", action="store_true", help="uji tanpa jaringan: cuaca buatan")
+    q.set_defaults(f=cmd_asal_api)
 
     q = sp.add_parser("drive-auth", help="sekali saja: dapatkan refresh token Google Drive")
     q.add_argument("--client-id", required=True), q.add_argument("--client-secret", required=True)

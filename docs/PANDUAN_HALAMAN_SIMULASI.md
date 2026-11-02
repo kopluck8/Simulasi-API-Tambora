@@ -47,4 +47,6 @@ Semua simulasi tersimpan di tab **Riwayat** (dari GitHub Releases repo) dan juga
 
 7. Tombol **3D** di Riwayat (atau tautan **Lihat dalam 3D** di hasil) membuka tab **Simulasi 3D**: tekan **Putar** untuk melihat api merambat, geser penggeser waktu maju-mundur, dan lihat pukul berapa api sampai di tiap tempat. Simulasi baru otomatis punya data 3D; untuk simulasi lama jalankan sekali workflow **Data 3D** di tab Actions.
 
+8. Tab **Asal Api** berisi hasil pemodelan terbalik: titik asal dan jam mulai tiap kejadian musim ini, jam rawan pembakaran, arah datang api, dan saran kalibrasi fuel model. Klik titik asal di peta atau baris di daftar untuk detailnya. Tombol **Simulasikan dari titik asal ini** mengisi formulir Simulasi dengan titik dan jam mulai kejadian itu. Hasil diperbarui otomatis tiap pagi (workflow **Asal api**), tidak perlu dijalankan dari halaman.
+
 Batasan: satu simulasi per menit, titik api harus di dalam AOI Tambora, lama maksimal 72 jam.

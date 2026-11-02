@@ -29,6 +29,7 @@
     <button class="tab" role="tab" data-tab="ringkasan" aria-selected="true">Ringkasan</button>
     <button class="tab" role="tab" data-tab="simulasi" aria-selected="false">Simulasi</button>
     <button class="tab" role="tab" data-tab="tiga" aria-selected="false">Simulasi 3D</button>
+    <button class="tab" role="tab" data-tab="asal" aria-selected="false">Asal Api</button>
     <button class="tab" role="tab" data-tab="riwayat" aria-selected="false">Riwayat</button>
     <button class="tab" role="tab" data-tab="landscape" aria-selected="false">Landscape</button>
     <button class="tab" role="tab" data-tab="panduan" aria-selected="false">Panduan</button>
@@ -266,6 +267,87 @@
     </div>
   </section>
 
+  <!-- ASAL API (pemodelan terbalik) -->
+  <section class="panel" id="panel-asal" role="tabpanel" hidden>
+    <div class="kartu as-kepala">
+      <div>
+        <h2>Dari mana api datang dan pukul berapa api mulai</h2>
+        <p class="muted small">Pemodelan terbalik (inverse modelling): untuk tiap kejadian kebakaran musim ini, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE (fmd20, fms, landscape, angin per jam ERA5) yang dijalankan mundur dan maju. Hasilnya titik asal api, perkiraan jam api mulai, arah datang api, dan faktor koreksi laju api untuk kalibrasi fuel model. Hasil ini informasi, bukan simulasi baru, dan dihitung ulang otomatis setiap hari.</p>
+      </div>
+      <p class="as-info small" id="asInfo">Memuat hasil…</p>
+    </div>
+
+    <div class="as-saring" role="group" aria-label="Saring kejadian">
+      <div><label for="asDari">Bulan dari</label><select id="asDari"></select></div>
+      <div><label for="asSampai">sampai</label><select id="asSampai"></select></div>
+      <div><label for="asMutu">Mutu dugaan</label>
+        <select id="asMutu"><option value="semua">Semua</option><option value="bs" selected>Baik dan sedang</option><option value="baik">Baik saja</option></select></div>
+      <div><label for="asLetak">Titik asal</label>
+        <select id="asLetak"><option value="semua">Semua</option><option value="dalam">Di dalam kawasan TN</option><option value="luar">Di luar kawasan TN</option></select></div>
+      <div><label for="asResort">Resort</label><select id="asResort"><option value="">Semua resort</option></select></div>
+      <div><label for="asLuas">Luas kejadian</label>
+        <select id="asLuas"><option value="0">Semua</option><option value="5">&ge; 5 ha</option><option value="25">&ge; 25 ha</option><option value="100">&ge; 100 ha</option></select></div>
+      <div class="as-saring-aksi"><button class="garis kecil" id="asReset">Atur ulang</button><span class="small muted" id="asJumlah"></span></div>
+    </div>
+
+    <div class="kpi-baris" id="asKpi">
+      <div class="kpi"><span>Kejadian dianalisis</span><b id="asKpiN">–</b><small id="asKpiNSub">–</small></div>
+      <div class="kpi api"><span>Jam paling rawan</span><b id="asKpiJam">–</b><small id="asKpiJamSub">–</small></div>
+      <div class="kpi"><span>Api mulai sebelum terdeteksi</span><b id="asKpiJeda">–</b><small id="asKpiJedaSub">–</small></div>
+      <div class="kpi"><span>Asal di luar kawasan TN</span><b id="asKpiLuar">–</b><small id="asKpiLuarSub">–</small></div>
+      <div class="kpi"><span>Faktor laju api (ROS)</span><b id="asKpiK">–</b><small id="asKpiKSub">–</small></div>
+    </div>
+
+    <div class="as-utama">
+      <div class="kartu as-peta-kartu">
+        <div class="as-peta-atas">
+          <h2>Peta titik asal dan arah rambat</h2>
+          <div class="as-warna"><label for="asWarna">Warna titik asal</label>
+            <select id="asWarna"><option value="jam">Jam api mulai</option><option value="mutu">Mutu dugaan</option></select></div>
+        </div>
+        <div id="asPeta" aria-label="Peta titik asal api"></div>
+        <p class="petunjuk">Panah pada titik asal menunjuk arah api merambat (dari titik asal ke pusat areal terbakar). Klik titik asal untuk melihat zona peluang 50% dan 90%, garis waktu rambat per jam, dan titik panas kejadian itu.</p>
+      </div>
+      <div class="as-samping">
+        <div class="kartu">
+          <h2>Jam rawan pembakaran</h2>
+          <p class="small" id="asJamTeks"></p>
+          <div class="as-legenda" id="asJamLegenda"></div>
+          <div class="as-grafik" id="asJam" role="img" aria-label="Jumlah kejadian per jam api mulai"></div>
+          <details><summary>Tabel per jam</summary><div class="tw" id="asJamTabel"></div></details>
+        </div>
+        <div class="kartu">
+          <h2>Arah datang api</h2>
+          <div class="as-mawar-baris">
+            <div class="as-mawar" id="asMawar" role="img" aria-label="Jumlah kejadian per arah datang api"></div>
+            <div class="small" id="asMawarTeks"></div>
+          </div>
+          <details><summary>Tabel per arah</summary><div class="tw" id="asMawarTabel"></div></details>
+        </div>
+      </div>
+    </div>
+
+    <div class="kartu as-detail" id="asDetail" hidden tabindex="-1"></div>
+
+    <div class="kartu">
+      <div class="aksi-baris" style="justify-content:space-between;margin-bottom:6px">
+        <h2 style="margin:0">Daftar kejadian</h2>
+        <span class="small muted">Klik baris untuk melihat detail. Jam dalam WITA.</span>
+      </div>
+      <div class="tw" id="asTabel"><div class="riwayat-kosong">Memuat…</div></div>
+    </div>
+
+    <div class="kartu" id="asKalibrasiKartu">
+      <h2>Kalibrasi fuel model dari kejadian nyata</h2>
+      <div id="asKalibrasi" class="small muted">Memuat…</div>
+    </div>
+
+    <div class="kartu prosa as-metode">
+      <h2>Metode dan keterbatasan</h2>
+      <div id="asMetode"></div>
+    </div>
+  </section>
+
   <!-- RIWAYAT -->
   <section class="panel" id="panel-riwayat" role="tabpanel" hidden>
     <div class="kartu">
@@ -315,6 +397,15 @@
         <li>Pilihan warna: waktu tiba, laju api, panjang nyala, intensitas, atau tipe api. Peta dasar: ketinggian, bahan bakar, atau citra satelit.</li>
         <li>Klik medan untuk info titik (pukul api tiba, laju, nyala, bahan bakar, lereng). Alat <b>Ukur</b> menghitung laju rata-rata api antara dua titik.</li>
         <li>Alat 3D lain: pembesaran tinggi, kontur, grid 1 km, jalur patroli, batas resort, arah dan tinggi matahari, bayangan, kamera (miring, dari atas, searah angin, dekat api), putar otomatis, tangkapan layar, layar penuh.</li>
+      </ul>
+      <h3>Asal Api (pemodelan terbalik)</h3>
+      <ul>
+        <li>Untuk tiap kejadian kebakaran musim ini, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE yang dijalankan mundur dan maju (fmd20, fms, landscape, angin per jam ERA5). Hasilnya <b>titik asal</b> (zona peluang 50% dan 90%), <b>perkiraan jam api mulai</b> dengan selang 90%, <b>arah datang api</b>, tempat api masuk kawasan bila asalnya di luar TN, dan <b>faktor laju api k</b>.</li>
+        <li>Grafik <b>jam rawan pembakaran</b> menjumlahkan perkiraan jam mulai semua kejadian per jam WITA, dibandingkan dengan jam deteksi satelit pertama (yang selalu jatuh di jam lintasan satelit, sekitar 01–03 dan 12–15).</li>
+        <li>Saring menurut bulan, mutu dugaan, letak titik asal, resort, dan luas. Semua angka, peta, dan grafik mengikuti saringan. Tabel bisa diunduh CSV, titik asal dan zona sebagai GeoJSON.</li>
+        <li>Klik titik asal atau baris tabel: zona peluang, garis waktu rambat per jam, titik panas kejadian itu (diwarnai menurut jam deteksi), grafik kapan api mulai, titik panas yang dipakai, dan cuaca per jam. Tombol <b>Simulasikan dari titik asal ini</b> mengisi tab Simulasi.</li>
+        <li><b>Mutu</b>: baik = terlihat di ≥ 2 lintasan satelit dan cocok; sedang = cukup cocok atau hanya 1 lintasan; rendah = kurang cocok. Faktor k kejadian yang baik dipakai untuk <b>saran kalibrasi</b> ros_adjust per kelas K1–K4 (tidak diterapkan otomatis).</li>
+        <li>Hasil diperbarui otomatis tiap pagi dan setiap ada delineasi baru. Titik asal adalah zona peluang, bukan titik pasti.</li>
       </ul>
       <h3>Sumber cuaca</h3>
       <ul>

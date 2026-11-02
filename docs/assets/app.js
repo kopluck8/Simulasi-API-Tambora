@@ -45,7 +45,7 @@ var KELAS = ['30', '31', '32', '33'];
 function sisaK(o) { return KELAS.reduce(function (s, k) { return s + (+((o || {})[k]) || 0); }, 0); }
 
 /* ---------- tab ---------- */
-var TABS = ['ringkasan', 'simulasi', 'tiga', 'riwayat', 'landscape', 'panduan'];
+var TABS = ['ringkasan', 'simulasi', 'tiga', 'asal', 'riwayat', 'landscape', 'panduan'];
 function buka(tab) {
   var bag = String(tab || '').split('/'), arg = bag[1] || '';
   tab = bag[0];
@@ -56,6 +56,16 @@ function buka(tab) {
   if (location.hash !== h) history.replaceState(null, '', h);
   if (tab === 'simulasi') siapkanPeta();
   if (tab === 'tiga') buka3D(arg);
+  if (tab === 'asal') bukaAsal(arg);
+}
+/* tab Asal Api (pemodelan terbalik) dimuat hanya saat dibuka */
+var modulAsal = null;
+function bukaAsal(id) {
+  if (!modulAsal) modulAsal = import('./asal.js');
+  modulAsal.then(function (m) { m.buka(id); }).catch(function (e) {
+    modulAsal = null;
+    $('asInfo').innerHTML = '<span class="err-teks">Tab Asal Api tidak bisa dimuat (' + esc(e && e.message ? e.message : e) + '). Muat ulang halaman.</span>';
+  });
 }
 /* tab 3D dimuat hanya saat dibuka (three.js dari CDN) */
 var modul3D = null;
@@ -653,7 +663,22 @@ window.TAMBORA = {
   rilis: function () { return RILIS; },
   saatRilis: function (f) { if (rilisSiap) f(); else pendengarRilis.push(f); },
   setHash: function (h) { history.replaceState(null, '', '#' + h); },
-  tampil2d: function (rel) { buka('simulasi'); tampil(rel); window.scrollTo(0, 0); }
+  tampil2d: function (rel) { buka('simulasi'); tampil(rel); window.scrollTo(0, 0); },
+  WARNA_RESORT: WARNA_RESORT, GAYA_JALUR: GAYA_JALUR,
+  /* isi formulir Simulasi dari luar (mis. titik asal hasil pemodelan terbalik) */
+  isiSimulasi: function (o) {
+    buka('simulasi'); window.scrollTo(0, 0);
+    $('mode').value = 'farsite';
+    document.querySelector('input[name=sumberCuaca][value=otomatis]').checked = true;
+    $('blokFile').hidden = true; CUACA = null;
+    $('kec').value = ''; $('arah').value = ''; $('kec').dataset.auto = '0';
+    aturMode();
+    if (o.mulai) $('mulai').value = o.mulai;
+    if (o.lama) $('lama').value = o.lama;
+    taruh(o.lat, o.lon);
+    setTimeout(function () { if (peta) peta.setView([o.lat, o.lon], 13); }, 200);
+    status(o.pesan || '', 'ok');
+  }
 };
 buka(location.hash.slice(1) || 'ringkasan');
 })();

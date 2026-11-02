@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: areal-terbakar
@@ -49,3 +50,10 @@ jobs:
           if git diff --cached --quiet; then echo "Tidak ada perubahan."; exit 0; fi
           git commit -m "Update areal terbakar $(python -c "import json;print(json.load(open('docs/status/areal_terbakar.json')).get('tanggal') or 'kosong')")"
           git pull --rebase -q origin main && git push
+          echo "baru=true" >> "$GITHUB_OUTPUT"
+        id: catat
+      - name: Hitung ulang asal api (tab Asal Api)
+        if: steps.catat.outputs.baru == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run asal-api.yml --ref main || echo "workflow asal-api belum bisa dipicu"
