@@ -190,8 +190,9 @@ def _xy_kasar(lat, lon):
     return np.column_stack([np.asarray(lon, float) * 111320.0 * math.cos(math.radians(-8.25)), lat * 110540.0])
 
 
-def gabung(lama, baru, dt_menit=12, jarak_m=200):
-    """Tambahkan titik baru yang belum ada (sensor sama, beda waktu <= 12 menit dan jarak <= 200 m = duplikat)."""
+def gabung(lama, baru, dt_menit=6, jarak_m=60):
+    """Tambahkan titik baru yang belum ada. Duplikat = deteksi yang sama dari sumber lain (SiPongi vs FIRMS):
+    sensor sama, beda waktu <= 6 menit dan jarak <= 60 m. Piksel VIIRS bertetangga (>= ~200 m) tetap dua titik."""
     from scipy.spatial import cKDTree
     if not lama:
         return sorted(baru, key=lambda p: p["t"])
