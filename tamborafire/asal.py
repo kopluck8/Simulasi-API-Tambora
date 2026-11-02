@@ -1375,6 +1375,28 @@ def kalibrasi(hasil, min_sorensen=0.3, maks_galat=3.0, n_boot=400, seed=1):
                                sorensen=h["sorensen"]) for h in rows])
 
 
+NAMA_NB = {91: "permukiman NB1", 92: "salju NB2", 93: "pertanian NB3", 98: "air NB8", 99: "batuan/bekas terbakar NB9"}
+
+
+def rinci_lain(ctx, evs, ids):
+    """Kode fuel di balik kelas 'lain' (bukan K1-K4) pada areal terbakar kejadian kalibrasi, dalam persen sel."""
+    from collections import Counter
+    from .fuels import standard_models
+    nama = {k: m.name for k, m in standard_models().items()}
+    c = Counter()
+    for ev in evs:
+        if ev["id"] in ids and ev.get("mask") is not None:
+            f = ctx.ls10_fuel30[ev["mask"]]
+            f = f[~np.isin(f, [int(k) for k in KELAS])]
+            v, n = np.unique(f, return_counts=True)
+            c.update(dict(zip((int(x) for x in v), (int(x) for x in n))))
+    tot = sum(c.values())
+    if not tot:
+        return []
+    return [dict(kode=k, nama=NAMA_NB.get(k) or nama.get(k) or str(k), persen=round(100.0 * v / tot, 1))
+            for k, v in sorted(c.items(), key=lambda kv: (-kv[1], kv[0])) if 100.0 * v / tot >= 0.5]
+
+
 def k_prior(kal, komposisi):
     """Pusat dan sebaran log k untuk kejadian 1 lintasan (tahap prior)."""
     if not kal or not kal.get("cukup"):
@@ -1581,6 +1603,8 @@ def jalankan(ctx, evs, lama=None, proses=4, hanya=None, log=print):
     for eid, h in hasil.items():
         h["id"] = eid
     ctx.kal = kalibrasi([h for h in hasil.values() if h.get("tahap") == "bebas"])
+    if ctx.kal.get("cukup"):
+        ctx.kal["lain_rinci"] = rinci_lain(ctx, evs, {r["id"] for r in ctx.kal.get("kejadian", [])})
     log("kalibrasi: " + json.dumps({k: v for k, v in ctx.kal.items() if k != "kejadian"}, default=str)[:600])
     putaran([ev for ev in layak if ev["tahap"] == "prior"], "prior")
     for eid, h in hasil.items():

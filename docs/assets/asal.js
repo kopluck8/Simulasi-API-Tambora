@@ -24,11 +24,13 @@ const KELAS_JAM = [
 const RAMP = ['#fcffa4', '#f98e09', '#bc3754', '#57106e'];
 const NAMA_KELAS = { '30': 'K1 (fuel 30)', '31': 'K2 (fuel 31)', '32': 'K3 (fuel 32)', '33': 'K4 (fuel 33)', lain: 'Lain (hutan, semak)' };
 
-let ST = null, ASAL = null, HS = null, HS_EV = {};
+let ST = null, HS = null, HS_EV = {};
 let siap = null, peta = null, lapis = {}, legenda = null, pilihan = null, nomorPilih = 0;
 const DETAIL = {};
 const S = { dari: '', sampai: '', mutu: 'bs', letak: 'semua', resort: '', luas: 0 };
 let urut = { kol: 'deteksi_awal', arah: -1 };
+const BARIS_AWAL = 25;
+let batasBaris = BARIS_AWAL;
 
 /* ---------- utilitas waktu (ISO lokal WITA tanpa zona) ---------- */
 function ms(iso) { return Date.parse(String(iso).slice(0, 16) + ':00Z'); }
@@ -71,13 +73,12 @@ function muat() {
   return ambilJSON('status/asal_api.json', { cache: 'no-cache' }).then((st) => {
     ST = st;
     return Promise.all([
-      ambilJSON('data/asal_api/peta.geojson' + versi()).catch(() => ({ features: [] })),
       ambilJSON('data/asal_api/titik_panas.geojson' + versi()).catch(() => ({ features: [] })),
       fetch('data/areal_terbakar.geojson').then((r) => r.ok ? r.json() : null).catch(() => null),
       T.siapData
     ]);
-  }).then(([pg, hs, areal]) => {
-    ASAL = pg; HS = hs; lapis.arealData = areal;
+  }).then(([hs, areal]) => {
+    HS = hs; lapis.arealData = areal;
     HS_EV = {};
     (HS.features || []).forEach((f) => { const ev = f.properties.ev; if (ev) (HS_EV[ev] = HS_EV[ev] || []).push(f); });
     siapkanSaring();
@@ -159,6 +160,7 @@ export function buka(arg) {
 
 function gambarSemua() {
   const list = tersaring();
+  batasBaris = BARIS_AWAL;
   $('asJumlah').textContent = list.length + ' kejadian · ' + angka(list.reduce((s, e) => s + (e.luas_ha || 0), 0)) + ' ha';
   gambarKpi(list);
   gambarAsal();
@@ -420,7 +422,9 @@ function gambarPilihan(e, det, opsi) {
   if (batas && batas.isValid() && !opsi.tanpaZoom) peta.flyToBounds(batas.pad(0.25), { maxZoom: 15, duration: 0.6 });
 }
 function tandaiBaris() {
-  document.querySelectorAll('#asTabel tbody tr').forEach((tr) => tr.classList.toggle('dipilih', !!pilihan && tr.dataset.id === pilihan.id));
+  const rows = Array.from(document.querySelectorAll('#asTabel tbody tr'));
+  if (pilihan && rows.length && !rows.some((tr) => tr.dataset.id === pilihan.id) && lolos(pilihan.e)) { gambarTabel(tersaring()); return; }
+  rows.forEach((tr) => tr.classList.toggle('dipilih', !!pilihan && tr.dataset.id === pilihan.id));
 }
 
 /* ---------- detail kejadian ---------- */
@@ -604,29 +608,39 @@ function gambarWaktu(e, det) {
 function gambarJam(list) {
   const el = $('asJam');
   const ok = berhasil(list), jr = jamRawan(ok), tot = jr.v.reduce((a, b) => a + b, 0);
-  $('asJamLegenda').innerHTML = '<span><i style="background:var(--as-s2)"></i>Perkiraan api mulai (model)</span><span><i style="background:var(--as-abu)"></i>Deteksi satelit pertama</span><span>sumbu: jam WITA, tinggi: jumlah kejadian</span>';
+  $('asJamLegenda').innerHTML = '<span>sumbu mendatar: jam WITA · tinggi: jumlah kejadian, skala tiap panel berbeda</span>';
   if (!ok.length) { el.innerHTML = '<p class="muted small">Tidak ada kejadian pada saringan ini.</p>'; $('asJamTeks').textContent = ''; $('asJamTabel').innerHTML = ''; return; }
   const w = jendelaRawan(jr.v, 3);
   const det = jr.det.reduce((a, b) => a + b, 0), puncakDet = jr.det.indexOf(Math.max(...jr.det));
-  $('asJamTeks').innerHTML = 'Api paling sering mulai pukul <b>' + teksJendela(w) + ' WITA</b> (' + angka(100 * w.jumlah / tot) + '% dari ' + ok.length + ' kejadian). ' +
-    'Jam deteksi satelit tidak sama dengan jam pembakaran: satelit hanya lewat sekitar pukul 01–03 dan 12–15, sehingga deteksi pertama menumpuk di jam lintasan (terbanyak pukul ' + String(puncakDet).padStart(2, '0') + ':00).';
-  const Wd = Math.max(el.clientWidth, 280), Hd = 200, kiri = 30, kanan = 6, atas = 12, bawah = 24, ph = Hd - atas - bawah;
-  const maks = Math.max(...jr.v, ...jr.det, 1);
-  const lt = langkahRapi(maks, 4), ymaks = Math.ceil(maks / lt) * lt;
-  const gw = (Wd - kiri - kanan) / 24, bw = Math.max(2, Math.min(10, (gw - 4) / 2));
-  const Y = (v) => atas + ph - v / ymaks * ph;
-  let s = '<svg viewBox="0 0 ' + Wd + ' ' + Hd + '" width="' + Wd + '" height="' + Hd + '">';
-  for (let v = 0; v <= ymaks + 1e-9; v += lt) {
-    s += '<line x1="' + kiri + '" x2="' + (Wd - kanan) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" class="' + (v === 0 ? 'as-dasar' : 'as-grid') + '"/>';
-    s += '<text x="' + (kiri - 6) + '" y="' + (Y(v) + 4) + '" class="as-sumbu-teks" text-anchor="end">' + angka(v, lt < 1 ? 1 : 0) + '</text>';
+  const multi = ok.filter((e) => e.n_lintasan >= 2);
+  let kokoh = '';
+  if (multi.length >= 10 && multi.length < ok.length) {
+    const jm = jamRawan(multi), wm = jendelaRawan(jm.v, 3), tm = jm.v.reduce((a, b) => a + b, 0);
+    kokoh = ' Untuk ' + multi.length + ' kejadian yang terlihat di 2 lintasan satelit atau lebih (jam mulainya lebih pasti), puncaknya <b>' + teksJendela(wm) + '</b> (' + angka(100 * wm.jumlah / tm) + '%).';
   }
+  $('asJamTeks').innerHTML = 'Api paling sering mulai pukul <b>' + teksJendela(w) + ' WITA</b> (' + angka(100 * w.jumlah / tot) + '% dari ' + ok.length + ' kejadian).' + kokoh + ' ' +
+    'Jam deteksi satelit tidak sama dengan jam pembakaran: satelit hanya lewat sekitar pukul 01–03 dan 12–15, sehingga deteksi pertama menumpuk di jam lintasan (terbanyak pukul ' + String(puncakDet).padStart(2, '0') + ':00).';
+  // dua panel berbagi sumbu jam: atas = perkiraan api mulai (model), bawah = deteksi satelit pertama (skala sendiri)
+  const Wd = Math.max(el.clientWidth, 280), kiri = 30, kanan = 6;
+  const p1 = { y0: 22, h: 120, v: jr.v, kelas: 'as-b-model', judul: 'Perkiraan api mulai (model)' };
+  const p2 = { y0: 172, h: 44, v: jr.det, kelas: 'as-b-det', judul: 'Deteksi satelit pertama' };
+  const Hd = p2.y0 + p2.h + 22;
+  const gw = (Wd - kiri - kanan) / 24, bw = Math.max(3, Math.min(14, gw - 3));
+  let s = '<svg viewBox="0 0 ' + Wd + ' ' + Hd + '" width="' + Wd + '" height="' + Hd + '" role="img" aria-label="Jumlah kejadian per jam api mulai dan per jam deteksi satelit pertama">';
+  [[p1, 3, false], [p2, 4, true]].forEach(([p, nt, ujung]) => {
+    const maks = Math.max(...p.v, 1), lt = langkahRapi(maks, nt), ymaks = Math.ceil(maks / lt) * lt;
+    p.Y = (v) => p.y0 + p.h - v / ymaks * p.h;
+    s += '<text x="' + kiri + '" y="' + (p.y0 - 9) + '" class="as-panel-judul">' + p.judul + '</text>';
+    for (let v = 0; v <= ymaks + 1e-9; v += lt) {
+      if (ujung && v > 0 && v < ymaks - 1e-9) continue;   // panel kecil: hanya garis 0 dan puncak
+      s += '<line x1="' + kiri + '" x2="' + (Wd - kanan) + '" y1="' + p.Y(v) + '" y2="' + p.Y(v) + '" class="' + (v === 0 ? 'as-dasar' : 'as-grid') + '"/>';
+      s += '<text x="' + (kiri - 6) + '" y="' + (p.Y(v) + 4) + '" class="as-sumbu-teks" text-anchor="end">' + angka(v, lt < 1 ? 1 : 0) + '</text>';
+    }
+    for (let h = 0; h < 24; h++) s += batangSvg(kiri + gw * h + (gw - bw) / 2, p.Y(p.v[h]), bw, p.Y(0) - p.Y(p.v[h]), p.kelas);
+  });
   for (let h = 0; h < 24; h++) {
-    const cx = kiri + gw * h + gw / 2;
-    const xa = cx - bw - 1, xb = cx + 1;
-    s += batangSvg(xa, Y(jr.v[h]), bw, Y(0) - Y(jr.v[h]), 'as-b-model');
-    s += batangSvg(xb, Y(jr.det[h]), bw, Y(0) - Y(jr.det[h]), 'as-b-det');
-    if (h % 3 === 0) s += '<text x="' + (kiri + gw * h) + '" y="' + (Hd - 6) + '" class="as-sumbu-teks" text-anchor="middle">' + String(h).padStart(2, '0') + '</text>';
-    s += '<rect x="' + (kiri + gw * h) + '" y="' + atas + '" width="' + gw + '" height="' + ph + '" class="as-hit" data-h="' + h + '"/>';
+    if (h % 3 === 0) s += '<text x="' + (kiri + gw * h + gw / 2) + '" y="' + (Hd - 6) + '" class="as-sumbu-teks" text-anchor="middle">' + String(h).padStart(2, '0') + '</text>';
+    s += '<rect x="' + (kiri + gw * h) + '" y="' + (p1.y0 - 4) + '" width="' + gw + '" height="' + (p2.y0 + p2.h - p1.y0 + 4) + '" class="as-hit" data-h="' + h + '"/>';
   }
   s += '</svg><div class="as-tip" hidden></div>';
   el.innerHTML = s;
@@ -703,7 +717,9 @@ function gambarTabel(list) {
   if (!baris.length) { $('asTabel').innerHTML = '<div class="riwayat-kosong">Tidak ada kejadian pada saringan ini.</div>'; return; }
   let h = '<table class="as-tabel"><thead><tr>' + KOLOM.map((k) => '<th class="' + (k.kiri ? 'kiri' : '') + '" aria-sort="' + (k.k === urut.kol ? (urut.arah > 0 ? 'ascending' : 'descending') : 'none') + '"><button data-k="' + k.k + '">' + k.j +
     (k.k === urut.kol ? (urut.arah > 0 ? ' ▲' : ' ▼') : '') + '</button></th>').join('') + '</tr></thead><tbody>';
-  baris.forEach((e) => {
+  const tampil = baris.slice(0, batasBaris);
+  if (pilihan && !tampil.some((e) => e.id === pilihan.id)) { const ep = baris.find((e) => e.id === pilihan.id); if (ep) tampil.push(ep); }
+  tampil.forEach((e) => {
     const ok = !!e.t_mulai;
     h += '<tr data-id="' + esc(e.id) + '" tabindex="0">' +
       '<td class="kiri"><b>' + esc(tgl(e.deteksi_awal)) + '</b><br><span class="muted small">deteksi ' + esc(jam(e.deteksi_awal)) + ' · ' + e.n_lintasan + ' lintasan</span></td>' +
@@ -719,6 +735,11 @@ function gambarTabel(list) {
       '<td class="kiri">' + lencanaMutu(e.mutu) + '</td></tr>';
   });
   h += '</tbody></table>';
+  if (baris.length > batasBaris) {
+    h += '<div class="aksi-baris as-lagi"><span class="muted small">Menampilkan ' + Math.min(batasBaris, baris.length) + ' dari ' + baris.length + ' kejadian</span>' +
+      '<button class="garis kecil" id="asLagi">Tampilkan ' + Math.min(BARIS_AWAL, baris.length - batasBaris) + ' lagi</button>' +
+      '<button class="garis kecil" id="asSemua">Tampilkan semua</button></div>';
+  }
   h += '<div class="aksi-baris" style="margin-top:10px"><button class="garis kecil" id="asCsv">Unduh tabel (CSV)</button><a class="tombol garis kecil" href="data/asal_api/peta.geojson" download="asal_api_titik_asal.geojson">Unduh titik asal &amp; zona (GeoJSON)</a></div>';
   $('asTabel').innerHTML = h;
   $('asTabel').querySelectorAll('th button').forEach((b) => b.addEventListener('click', () => {
@@ -732,6 +753,10 @@ function gambarTabel(list) {
     tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
   });
   $('asCsv').addEventListener('click', () => unduhCsv(baris));
+  if ($('asLagi')) {
+    $('asLagi').addEventListener('click', () => { batasBaris += BARIS_AWAL; gambarTabel(tersaring()); });
+    $('asSemua').addEventListener('click', () => { batasBaris = Infinity; gambarTabel(tersaring()); });
+  }
   tandaiBaris();
 }
 function teksJalurPendek(j) {
@@ -796,12 +821,31 @@ function gambarKalibrasi() {
     '(selang 90%: ' + angka(kal.global_p05, 2) + '–' + angka(kal.global_p95, 2) + '). Di bawah ini faktor per kelas bahan bakar, dipisahkan dengan regresi menurut komposisi kelas di tiap areal kejadian. ' +
     'Faktor &lt; 1 berarti simulasi lebih cepat dari api nyata; &gt; 1 berarti lebih lambat.</p>';
   t += '<div class="as-grafik-hutan">' + s + '</div>';
-  t += '<div class="tw"><table><thead><tr><th>Kelas</th><th>Faktor</th><th>Selang 90%</th><th>Bobot data (kejadian setara)</th><th>ros_adjust sekarang</th><th>Saran ros_adjust</th></tr></thead><tbody>' +
+  const rinci = kal.lain_rinci || [], utama = rinci[0];
+  const teksRinci = rinci.slice(0, 3).map((r) => esc(r.nama) + ' (' + r.kode + ') ' + angka(r.persen) + '%').join(', ');
+  const nyata = (p) => p.p05 > 1 || p.p95 < 1;
+  t += '<div class="tw"><table><thead><tr><th>Kelas</th><th>Faktor</th><th>Selang 90%</th><th>Beda dari fmd20</th><th>Bobot data (kejadian setara)</th><th>ros_adjust sekarang</th><th>Saran ros_adjust</th></tr></thead><tbody>' +
     kelas.map((c) => {
       const p = kal.kelas[c] || {}, now = +(ra[c] != null ? ra[c] : (ra[+c] != null ? ra[+c] : 1));
-      const saran = c === 'lain' ? '–' : ((p.n_efektif || 0) >= 1 ? angka(now * p.faktor, 2) : '<span class="muted">data kurang</span>');
-      return '<tr><td>' + esc(NAMA_KELAS[c]) + '</td><td>×' + angka(p.faktor, 2) + '</td><td>' + angka(p.p05, 2) + '–' + angka(p.p95, 2) + '</td><td>' + angka(p.n_efektif, 1) + '</td><td>' + (c === 'lain' ? '–' : angka(now, 2)) + '</td><td>' + saran + '</td></tr>';
+      const cukup = (p.n_efektif || 0) >= 1;
+      let saran = cukup ? angka(now * p.faktor, 2) : '<span class="muted">data kurang</span>';
+      if (c === 'lain') saran = cukup && utama && utama.persen >= 60 && nyata(p) ? 'kode ' + utama.kode + ': ' + angka((ra[utama.kode] != null ? +ra[utama.kode] : 1) * p.faktor, 2) : '–';
+      const beda = !cukup ? '<span class="muted">data kurang</span>' : nyata(p) ? '<b>nyata</b> (' + (p.faktor > 1 ? 'api nyata lebih cepat' : 'api nyata lebih lambat') + ')' : 'belum nyata';
+      const nama = c === 'lain' && teksRinci ? esc(NAMA_KELAS[c]) + '<br><span class="muted small">' + teksRinci + '</span>' : esc(NAMA_KELAS[c]);
+      return '<tr><td>' + nama + '</td><td>×' + angka(p.faktor, 2) + '</td><td>' + angka(p.p05, 2) + '–' + angka(p.p95, 2) + '</td><td>' + beda + '</td><td>' + angka(p.n_efektif, 1) + '</td><td>' +
+        (c === 'lain' ? '–' : angka(now, 2)) + '</td><td>' + saran + '</td></tr>';
     }).join('') + '</tbody></table></div>';
+  const kNyata = kelas.filter((c) => c !== 'lain' && (kal.kelas[c] || {}).n_efektif >= 1 && nyata(kal.kelas[c]));
+  const kBelum = kelas.filter((c) => c !== 'lain' && (kal.kelas[c] || {}).n_efektif >= 1 && !nyata(kal.kelas[c]));
+  const pl = kal.kelas.lain || {};
+  let bacaan = '';
+  if (kBelum.length) bacaan += 'Savana ' + kBelum.map((c) => PENDEK[c].split(' ')[0]).join(', ') + ': selang 90% masih mencakup ×1, jadi fmd20 belum terbukti terlalu cepat atau terlalu lambat; koreksi kelas ini sebaiknya menunggu lebih banyak kejadian. ';
+  if (kNyata.length) bacaan += 'Savana ' + kNyata.map((c) => PENDEK[c].split(' ')[0] + ' (×' + angka(kal.kelas[c].faktor, 2) + ')').join(', ') + ' berbeda nyata dari fmd20. ';
+  if ((pl.n_efektif || 0) >= 1 && nyata(pl)) {
+    bacaan += 'Sinyal paling kuat ada di kelas lain' + (teksRinci ? ' (' + teksRinci + ')' : '') + ': api nyata ×' + angka(pl.faktor, 2) + ' ' + (pl.faktor > 1 ? 'lebih cepat' : 'lebih lambat') + ' dari simulasi. ' +
+      (pl.faktor > 1 ? 'Kemungkinan sebagian areal yang dipetakan sebagai hutan sebenarnya savana atau semak terbuka saat kemarau, atau model hutan itu terlalu lambat. Pilihannya: perbaiki peta fuel di tepi hutan yang terbakar, atau beri ros_adjust untuk kode ' + (utama ? utama.kode : 'hutan') + '.' : '');
+  }
+  if (bacaan) t += '<p class="small as-bacaan"><b>Bacaan:</b> ' + bacaan + '</p>';
   t += '<p class="petunjuk">Saran ini <b>belum diterapkan</b> ke simulasi. Bila disetujui, nilainya diisi di <code>[kalibrasi] ros_adjust</code> pada <code>config/tambora.toml</code> (contoh <code>{ 30 = 0.9, 31 = 1.1 }</code>), lalu simulasi dan pemodelan terbalik memakai fmd20 yang sudah dikoreksi. ' +
     'Kelas dengan bobot data &lt; 1 belum cukup terwakili. Faktor k satu kejadian juga memuat galat angin ERA5 dan peta bahan bakar, jadi pakai nilai gabungan, bukan satu kejadian.</p>';
   if ((kal.kejadian || []).length) {
@@ -835,6 +879,7 @@ function gambarMetode() {
     '<h3>Keterbatasan</h3><ul>' +
     '<li>Titik asal adalah <b>zona peluang</b>, bukan titik pasti. Piksel VIIRS 375 m dan MODIS 1 km, jadi zona 50% biasanya puluhan sampai ratusan hektare.</li>' +
     '<li>Satelit hanya lewat beberapa kali sehari (sekitar pukul 01–03 dan 12–15 WITA). Kejadian yang hanya terlihat sekali punya selang jam mulai yang lebar dan sangat bergantung pada faktor k dari kalibrasi.</li>' +
+    '<li>Hanya api yang masih menyala saat satelit lewat yang tercatat. Api kecil yang dinyalakan sore lalu padam sebelum lintasan malam, atau dinyalakan pagi lalu padam sebelum lintasan siang, tidak terdeteksi. Karena itu jam rawan condong ke jam menjelang lintasan siang; bandingkan dengan pola kejadian yang terlihat di 2 lintasan atau lebih (saringan Mutu: baik).</li>' +
     '<li>Angin ERA5 adalah data model grid 9–25 km. Angin lokal (lembah, angin gunung-laut) bisa berbeda dan menggeser titik asal ke arah angin.</li>' +
     '<li>Peta bahan bakar dari citra awal kemarau; perubahan sesudahnya (rumput mengering, bekas terbakar tanpa delineasi) belum terwakili.</li>' +
     '<li>Satu kejadian bisa berasal dari lebih dari satu titik penyulutan. Bila areal sangat luas dengan titik panas pertama berjauhan, hasil menunjuk titik asal yang paling menjelaskan seluruh data.</li>' +

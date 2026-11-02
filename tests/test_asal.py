@@ -164,3 +164,19 @@ def test_pita_piksel_dan_skor():
     assert A._galat_pita(lo, hi, np.array([3.5]), rsd)[0] == 0.0               # masih menyala saat lintasan
     assert A._galat_pita(lo, hi, np.array([1.0]), rsd)[0] == pytest.approx(-1.55)  # simulasi terlambat
     assert A._galat_pita(lo, hi, np.array([6.0]), rsd)[0] == pytest.approx(1.8)    # simulasi terlalu awal
+
+
+def test_rinci_lain_menamai_kode_fuel():
+    """Kelas 'lain' di kalibrasi dirinci per kode fuel (hanya kejadian kalibrasi, tanpa K1-K4)."""
+    class _Ctx:
+        ls10_fuel30 = np.array([[31, 161, 161, 186], [32, 161, 93, 30], [161, 161, 186, 99]], np.int16)
+    m1 = np.zeros((3, 4), bool)
+    m1[:2, :] = True                      # 31,161,161,186,32,161,93,30 -> lain: 161 x3, 186, 93
+    m2 = np.zeros((3, 4), bool)
+    m2[2, :] = True                       # tidak dipakai kalibrasi
+    evs = [dict(id="A", mask=m1), dict(id="B", mask=m2)]
+    r = A.rinci_lain(_Ctx(), evs, {"A"})
+    assert [x["kode"] for x in r] == [161, 93, 186]          # seri diurutkan menurut kode
+    assert r[0]["nama"] == "TU1" and r[0]["persen"] == pytest.approx(60.0)
+    assert r[1]["nama"] == "pertanian NB3" and r[2]["nama"] == "TL6"
+    assert A.rinci_lain(_Ctx(), evs, set()) == []

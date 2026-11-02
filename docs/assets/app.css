@@ -77,7 +77,7 @@ td.kiri,th.kiri{text-align:left}
 /* tombol dan formulir */
 button,.tombol{font:inherit;font-weight:600;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;background:var(--brand);color:var(--brand-fg);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
 button.garis,.tombol.garis{background:transparent;color:var(--brand);border:1px solid var(--brand)}
-button.kecil{padding:5px 10px;font-size:13px}
+button.kecil,.tombol.kecil{padding:5px 10px;font-size:13px}
 button:disabled{opacity:.5;cursor:default}
 button.utama{width:100%;justify-content:center;padding:11px;font-size:15px;background:var(--fire);color:#fff;margin-top:14px}
 label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 4px;font-weight:600}
@@ -291,6 +291,8 @@ td .as-bulat{width:8px;height:8px;border-width:1px}
 .as-grafik text,.as-hutan text,.as-mawar text{font:12px system-ui,-apple-system,"Segoe UI",sans-serif}
 .as-sumbu-teks{fill:var(--muted);font-variant-numeric:tabular-nums}
 .as-sumbu-teks.kuat{fill:var(--fg);font-weight:600}
+.as-panel-judul{fill:var(--fg);font-size:12px;font-weight:600}
+.as-lagi{margin-top:10px;align-items:center;flex-wrap:wrap}
 .as-label{fill:var(--fg);font-variant-numeric:tabular-nums}
 .as-label.redup,.as-titik.redup,.as-selang.redup{opacity:.45}
 .as-label-kuat{fill:var(--fg);font-weight:700;font-size:12.5px}
@@ -323,6 +325,7 @@ td .as-bulat{width:8px;height:8px;border-width:1px}
 .mutu.rendah{color:var(--muted);border-color:var(--line)}
 .mutu.gagal{color:var(--err);border-color:var(--err)}
 .as-tabel td{vertical-align:top;line-height:1.4}
+.as-tabel th,.as-tabel td{padding-left:7px;padding-right:7px}
 .as-tabel tbody tr{cursor:pointer}
 .as-tabel tbody tr:hover{background:var(--soft)}
 .as-tabel tbody tr:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
@@ -345,6 +348,7 @@ td .as-bulat{width:8px;height:8px;border-width:1px}
 .as-waktu{margin-top:2px}
 .as-aksi{margin-top:12px}
 .as-grafik-hutan{overflow-x:auto;margin:6px 0 8px}
+.as-bacaan{margin:10px 0 4px;padding:10px 12px;border-radius:8px;background:var(--soft);max-width:70em}
 .as-hutan{display:block;overflow:visible}
 .as-metode{max-width:none}
 .as-metode ol,.as-metode ul{max-width:900px}
