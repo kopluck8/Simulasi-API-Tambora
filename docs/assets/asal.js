@@ -459,7 +459,8 @@ function gambarDetail(e, det) {
       '<br>simulasi paling cocok: ' + esc(jam(e.t_mulai)), true) +
     fakta('Terdeteksi satelit pertama', esc(jam(e.deteksi_awal)) + ' WITA', durasi(jeda) + ' setelah perkiraan api mulai') +
     fakta('Titik asal', esc(a.lat.toFixed(5) + ', ' + a.lon.toFixed(5)),
-      (a.di_tn ? 'di dalam kawasan TN' : 'di luar kawasan TN') + (lok ? ' · ' + esc(lok.teks) : '') + '<br>' + angka(a.elev) + ' mdpl · ' + esc(NF[a.fuel] || ('fuel ' + a.fuel)) +
+      (a.di_tn ? 'di dalam kawasan TN' : 'di luar kawasan TN') + (lok && lok.resort ? ' · ' + esc(lok.resort.nama) : '') + (lok && lok.grid ? ' · Grid ' + esc(lok.grid.id) : '') +
+      '<br>' + angka(a.elev) + ' mdpl · ' + esc(NF[a.fuel] || ('fuel ' + a.fuel)) +
       (teksJalur(a.jalur) ? '<br>' + teksJalur(a.jalur) : '')) +
     fakta('Arah api', e.api_datang_dari ? 'datang dari ' + esc(e.api_datang_dari) : '–',
       e.arah_rambat != null ? 'merambat ke ' + esc(e.arah_rambat_teks) + ' (' + e.arah_rambat + '°), ' + angka(e.jarak_ke_pusat_m / 1000, 1) + ' km dari titik asal ke pusat areal' : '') +
@@ -798,7 +799,7 @@ function gambarKalibrasi() {
   t += '<div class="tw"><table><thead><tr><th>Kelas</th><th>Faktor</th><th>Selang 90%</th><th>Bobot data (kejadian setara)</th><th>ros_adjust sekarang</th><th>Saran ros_adjust</th></tr></thead><tbody>' +
     kelas.map((c) => {
       const p = kal.kelas[c] || {}, now = +(ra[c] != null ? ra[c] : (ra[+c] != null ? ra[+c] : 1));
-      const saran = c !== 'lain' && (p.n_efektif || 0) >= 1 ? angka(now * p.faktor, 2) : '<span class="muted">data kurang</span>';
+      const saran = c === 'lain' ? '–' : ((p.n_efektif || 0) >= 1 ? angka(now * p.faktor, 2) : '<span class="muted">data kurang</span>');
       return '<tr><td>' + esc(NAMA_KELAS[c]) + '</td><td>×' + angka(p.faktor, 2) + '</td><td>' + angka(p.p05, 2) + '–' + angka(p.p95, 2) + '</td><td>' + angka(p.n_efektif, 1) + '</td><td>' + (c === 'lain' ? '–' : angka(now, 2)) + '</td><td>' + saran + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   t += '<p class="petunjuk">Saran ini <b>belum diterapkan</b> ke simulasi. Bila disetujui, nilainya diisi di <code>[kalibrasi] ros_adjust</code> pada <code>config/tambora.toml</code> (contoh <code>{ 30 = 0.9, 31 = 1.1 }</code>), lalu simulasi dan pemodelan terbalik memakai fmd20 yang sudah dikoreksi. ' +
