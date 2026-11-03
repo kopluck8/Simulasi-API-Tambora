@@ -41,7 +41,10 @@ jobs:
       GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
       FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
     steps:
+      # main terbaru saat job mulai (bukan commit pemicu): run yang antre memakai hasil run sebelumnya sebagai cache
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -82,5 +85,9 @@ jobs:
           git add docs/status/asal_api.json docs/data/asal_api data/titik_panas 2>/dev/null || true
           if git diff --cached --quiet; then echo "Tidak ada perubahan."; exit 0; fi
           git commit -q -m "Update asal api $(date -u +%Y-%m-%d)"
-          for i in 1 2 3 4; do git pull --rebase -q origin main && git push && exit 0; sleep $((i * 5)); done
+          # bentrok di berkas hasil (run lain menulis berkas yang sama): hasil run ini yang dipakai (-X theirs saat rebase)
+          for i in 1 2 3 4; do
+            if git pull --rebase -X theirs -q origin main; then git push && exit 0; else git rebase --abort 2>/dev/null || true; fi
+            sleep $((i * 5))
+          done
           exit 1
