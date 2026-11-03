@@ -18,6 +18,17 @@ fms = "kalibrasi/tambora_latihan.fms"
 # Nilai yang sama untuk FlamMap desktop: kalibrasi/tambora_ros_adjust.adj (ROS Adjust File).
 ros_adjust = { 31 = 0.77, 32 = 0.69, 33 = 1.33, 161 = 3.13 }
 
+# Catatan lapangan intervensi pemadaman. Kejadian yang cocok tetap dihitung (titik asal, jam mulai), tetapi tidak
+# dipakai untuk kalibrasi laju api karena arah dan lajunya dibelokkan regu pemadam. Cocok bila ada titik panasnya
+# pada tanggal dari..sampai (WITA) dan <= radius_km dari lat/lon, atau langsung dengan kejadian = "<id>".
+[[pemadaman]]
+dari = "2026-09-09"
+sampai = "2026-09-15"
+lat = -8.2585                 # titik panas VIIRS pertama di Piong
+lon = 118.1506
+radius_km = 3
+catatan = "Ada pemadaman (catatan Deo, 3 Nov 2026): 10 Sep api yang seharusnya menyebar ke samping kiri dari arah datangnya dipadamkan, sehingga api merambat naik ke bukit Doro Tabe Nae."
+
 [drive]
 # ID folder induk di Google Drive (bagian terakhir URL folder). Bisa juga diisi lewat secret GDRIVE_FOLDER_ID.
 folder_id = ""

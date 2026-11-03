@@ -1555,6 +1555,44 @@ def analisis(ctx, ev, k_grid, logp_k, stage="bebas", maks_titik=16, log=print, f
 
 
 # =============================================================== kalibrasi
+def tandai_pemadaman(ctx, evs, catatan):
+    """Catatan lapangan intervensi pemadaman ([[pemadaman]] di config). Kejadian ditandai bila id-nya sama dengan
+    "kejadian", atau ada titik panasnya pada tanggal dari..sampai (WITA, inklusif) dan <= radius_km dari lat/lon.
+    Kejadian bertanda tetap dihitung (titik asal, jam mulai), tetapi tidak dipakai untuk kalibrasi laju api karena
+    arah dan lajunya dibelokkan regu pemadam. Mengembalikan jumlah kejadian bertanda."""
+    n = 0
+    for c in catatan or []:
+        dari = str(c.get("dari") or c.get("tanggal") or "")[:10]
+        sampai = str(c.get("sampai") or dari)[:10]
+        r = float(c.get("radius_km", 3.0)) * 1000.0
+        xy = None
+        if c.get("lat") is not None and c.get("lon") is not None:
+            xy = np.array(ctx.g.ke_utm.transform(float(c["lon"]), float(c["lat"])), float)
+        for ev in evs:
+            if ev.get("pemadaman"):
+                continue
+            kena = bool(c.get("kejadian")) and ev["id"] == c["kejadian"]
+            if not kena and xy is not None and dari:
+                for i in ev["idx"]:
+                    hari = ctx.hs[i]["t"].strftime("%Y-%m-%d")
+                    if dari <= hari <= sampai and float(np.hypot(*(ctx.xy[i] - xy))) <= r:
+                        kena = True
+                        break
+            if kena:
+                ev["pemadaman"] = str(c.get("catatan") or "ada intervensi pemadaman")
+                n += 1
+    return n
+
+
+def baris_kalibrasi(hasil, evs):
+    """Hasil tahap bebas untuk kalibrasi, tanpa kejadian yang ditandai ada pemadaman. -> (baris, dikecualikan)."""
+    pem = {ev["id"]: ev["pemadaman"] for ev in evs if ev.get("pemadaman")}
+    bebas = [h for h in hasil.values() if h.get("tahap") == "bebas"]
+    keluar = [dict(id=h["id"], alasan=pem[h["id"]], k=h.get("k_p50"), sorensen=h.get("sorensen"))
+              for h in bebas if h.get("id") in pem]
+    return [h for h in bebas if h.get("id") not in pem], keluar
+
+
 def kalibrasi(hasil, min_sorensen=0.3, maks_galat=3.0, n_boot=400, seed=1):
     """Gabung faktor k kejadian (tahap bebas) per kelas bahan bakar: log k_e = Σ_c f_ec b_c + galat,
     dengan b_c = b0 + d_c, d_c ~ N(0, 0,5²) dan b0 ~ N(0, 1²) (ridge). Selang dari bootstrap kejadian."""
@@ -1940,7 +1978,10 @@ def jalankan(ctx, evs, lama=None, proses=4, hanya=None, log=print):
     putaran([ev for ev in layak if ev["tahap"] == "bebas"], "bebas")
     for eid, h in hasil.items():
         h["id"] = eid
-    ctx.kal = kalibrasi([h for h in hasil.values() if h.get("tahap") == "bebas"])
+    baris, keluar = baris_kalibrasi(hasil, evs)
+    ctx.kal = kalibrasi(baris)
+    if keluar:
+        ctx.kal["dikecualikan"] = keluar
     if ctx.kal.get("cukup"):
         ctx.kal["lain_rinci"] = rinci_lain(ctx, evs, {r["id"] for r in ctx.kal.get("kejadian", [])})
     log("kalibrasi: " + json.dumps({k: v for k, v in ctx.kal.items() if k != "kejadian"}, default=str)[:600])
@@ -1966,6 +2007,8 @@ def _ringkas_kejadian(ctx, ev, h):
                n_lintasan=ev["n_lintasan"], sensor=dict(sensor), luas_ha=ev["luas_ha"],
                tn_persen=round(100 * float(ctx.tn[m].mean()), 1) if m.any() else 0.0, resort=resort,
                desa=desa.most_common(1)[0][0] if desa else None, tahap=ev.get("tahap"), bidang=ev.get("bidang") or [])
+    if ev.get("pemadaman"):
+        out["pemadaman"] = ev["pemadaman"]
     if h:
         for k, v in h.items():
             if not k.startswith("_") and k not in ("residu",):

@@ -636,6 +636,7 @@ function gambarDetail(e, det) {
     '<p class="small muted">' + esc(e.id) + ' · ' + angka(e.luas_ha, 1) + ' ha areal terbakar (' + angka(e.tn_persen) + '% di kawasan TN' +
     ((e.bidang || []).length ? ', ' + e.bidang.length + ' bidang delineasi' : '') + ') · ' + e.n_titik + ' titik panas di ' + e.n_lintasan + ' lintasan satelit (' + esc(sensor) + ')</p></div>' +
     '<div class="aksi-baris">' + lencanaMutu(e.mutu) + '<button class="garis kecil" id="asTutup" aria-label="Tutup detail">Tutup</button></div></div>';
+  if (e.pemadaman) h += '<p class="pesan warn">' + esc(e.pemadaman) + ' Arah dan laju api kejadian ini dibelokkan pemadaman, jadi kejadian ini <b>tidak dipakai untuk kalibrasi laju api</b>. Titik asal dan jam mulai tetap ditampilkan sebagai perkiraan; arah rambat dan faktor k-nya jangan dijadikan patokan.</p>';
   if (!e.t_mulai) {
     kartu.innerHTML = h + '<p class="pesan warn">' + esc(e.catatan || 'Kejadian ini tidak bisa dihitung.') + '</p>';
     $('asTutup').addEventListener('click', lepasPilihan);
@@ -1010,7 +1011,7 @@ function gambarTabel(list) {
         '<td class="kiri">' + esc(e.api_datang_dari || '–') + '</td>' +
         '<td>×' + angka(e.k_p50, 2) + '</td><td>' + angka(e.sorensen, 2) + '</td>'
         : '<td colspan="7" class="kiri muted small">' + esc((e.catatan || 'tidak terhitung').slice(0, 120)) + '</td>') +
-      '<td class="kiri">' + lencanaMutu(e.mutu) + '</td></tr>';
+      '<td class="kiri">' + lencanaMutu(e.mutu) + (e.pemadaman ? '<br><span class="muted small" title="' + esc(e.pemadaman) + '">ada pemadaman</span>' : '') + '</td></tr>';
   });
   h += '</tbody></table>';
   if (baris.length > batasBaris) {
@@ -1131,6 +1132,10 @@ function gambarKalibrasi() {
   t += '<p class="petunjuk">' + (adaRa ? 'Koreksi yang sedang dipakai simulasi dan pemodelan terbalik: <b>' + esc(teksRa(ra)) + '</b>. Faktor di atas dihitung dari simulasi yang sudah memakai koreksi ini, jadi ×1 berarti koreksinya sudah pas, dan saran = ros_adjust sekarang × faktor. Saran baru <b>tidak diterapkan otomatis</b>. ' :
     'Saran ini <b>belum diterapkan</b> ke simulasi. ') + 'Bila disetujui, nilainya diisi di <code>[kalibrasi] ros_adjust</code> pada <code>config/tambora.toml</code> (contoh <code>{ 30 = 0.9, 31 = 1.1 }</code>), lalu simulasi dan pemodelan terbalik memakai fmd20 yang sudah dikoreksi. ' +
     'Kelas dengan bobot data &lt; 1 belum cukup terwakili. Faktor k satu kejadian juga memuat galat angin ERA5 dan peta bahan bakar, jadi pakai nilai gabungan, bukan satu kejadian.</p>';
+  if ((kal.dikecualikan || []).length) {
+    t += '<p class="small"><b>Tidak dipakai karena ada intervensi pemadaman</b> (catatan lapangan): ' + kal.dikecualikan.map((k) => '<a href="#asal/' + esc(k.id) + '">' + esc(tgl(cariKejadian(k.id).deteksi_awal || k.id.slice(1, 5) + '-' + k.id.slice(5, 7) + '-' + k.id.slice(7, 9))) + '</a>' +
+      (k.k != null ? ' (k ×' + angka(k.k, 2) + ', Sørensen ' + angka(k.sorensen, 2) + ')' : '')).join(', ') + '. Arah dan laju api kejadian ini dibelokkan regu pemadam, jadi faktor k-nya tidak menggambarkan bahan bakar.</p>';
+  }
   if ((kal.kejadian || []).length) {
     t += '<details><summary>Kejadian yang dipakai (' + kal.kejadian.length + ')</summary><div class="tw"><table><thead><tr><th>Kejadian</th><th>Faktor k</th><th>Selang 90%</th><th>Sørensen</th><th>K1</th><th>K2</th><th>K3</th><th>K4</th><th>Lain</th></tr></thead><tbody>' +
       kal.kejadian.map((k) => '<tr><td><a href="#asal/' + esc(k.id) + '">' + esc(tgl(cariKejadian(k.id).deteksi_awal || '')) + '</a></td><td>×' + angka(k.k, 2) + '</td><td>' + angka(k.k_p05, 2) + '–' + angka(k.k_p95, 2) + '</td><td>' + angka(k.sorensen, 2) + '</td>' +
@@ -1152,7 +1157,7 @@ function gambarMetode() {
     '<li><b>Cuaca</b> per jam ERA5/ERA5-Land (Open-Meteo, sama dengan pembuat .wxs) di lokasi tiap kejadian, mulai 3 hari sebelumnya untuk pengkondisian kadar air bahan bakar (fms). Angin diarahkan medan seperti pada simulasi.</li>' +
     '<li><b>Simulasi mundur</b>: dari tiap titik panas, waktu rambat dihitung terbalik (arah angin dibalik) di landscape dan fmd20. Hasilnya, untuk tiap sel peta, jam paling akhir api bisa menyala di sel itu agar masih sampai di piksel satelit pada jam deteksinya. Sel yang cocok dengan semua titik panas sekaligus menjadi kandidat titik asal, dengan jam mulai yang sesuai. Lintasan satelit yang lewat sebelum deteksi pertama tanpa melihat api ikut membatasi jam mulai.</li>' +
     '<li><b>Simulasi maju</b> dari kandidat terbaik (FARSITE, ' + (p.k_bebas || []).length + ' faktor laju api k dari ×' + angka((p.k_bebas || [0.35])[0], 2) + ' sampai ×' + angka((p.k_bebas || [2.83]).slice(-1)[0], 2) + '): dinilai dari kecocokan waktu (api menyala di piksel satelit pada jam lintasan) dan kecocokan bentuk areal terbakar (Sørensen). Hasilnya zona asal peluang 50% dan 90%, sebaran jam mulai, faktor k, dan garis waktu rambat.</li>' +
-    '<li><b>Kalibrasi</b>: faktor k kejadian yang terlihat di ≥ 2 lintasan satelit digabung per kelas bahan bakar K1–K4 (regresi berbobot dengan bootstrap). Kejadian yang hanya terlihat 1 kali memakai faktor gabungan ini sebagai dugaan awal.</li>' +
+    '<li><b>Kalibrasi</b>: faktor k kejadian yang terlihat di ≥ 2 lintasan satelit digabung per kelas bahan bakar K1–K4 (regresi berbobot dengan bootstrap). Kejadian yang tercatat ada intervensi pemadaman (catatan lapangan di <code>[[pemadaman]]</code> config) tidak dipakai, karena arah dan lajunya dibelokkan regu pemadam. Kejadian yang hanya terlihat 1 kali memakai faktor gabungan ini sebagai dugaan awal.</li>' +
     '<li><b>Jam rawan</b> = jumlah sebaran jam mulai semua kejadian per jam WITA. Arah datang api = arah dari pusat areal terbakar ke titik asal.</li>' +
     '<li><b>Laju api</b> (m/menit) = laju muka api di tiap sel dari simulasi terbaik kejadian itu (1 / gradien waktu tiba, sama dengan keluaran Spread Rate FARSITE), hanya di dalam areal terbakar, dirata-rata per jam WITA. Kepala api = persentil 90 (arah tercepat). Ringkasan per periode (pagi 06:00–10:59, siang 11:00–14:59, sore 15:00–17:59, malam 18:00–05:59) memberi bobot sama untuk tiap kejadian.</li></ol>' +
     '<h3>Data dan hasil saat ini</h3><ul>' +

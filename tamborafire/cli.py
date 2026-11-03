@@ -736,6 +736,10 @@ def cmd_asal_api(args, cfg):
     ctx.satuan = satuan
     zona = args.zona_luar_tn if args.zona_luar_tn is not None else cfg["kawasan"].get("zona_luar_tn_m")
     evs, info = A.siapkan(ctx, min_ha=args.min_ha, zona_m=None if zona is None or zona < 0 else zona)
+    n_pem = A.tandai_pemadaman(ctx, evs, cfg.get("pemadaman", []))
+    if n_pem:
+        info["kejadian_pemadaman"] = n_pem
+        print("pemadaman (catatan lapangan):", ", ".join(ev["id"] for ev in evs if ev.get("pemadaman")))
     lama = {} if args.ulang else A.hasil_lama(args.status, args.keluaran)
     hanya = set(args.hanya.split(",")) if args.hanya else None
     hasil, gagal = A.jalankan(ctx, evs, lama, proses=args.proses, hanya=hanya)

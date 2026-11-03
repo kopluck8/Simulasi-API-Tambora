@@ -398,3 +398,36 @@ def test_bidang_mengikuti_bulan_di_shp(tmp_path):
     assert a["kejadian"] == "K20260615-1300" and a["cocok_shp"] is True and a["bulan_shp"] == "2026-06"
     assert a["waktu_awal"] == "2026-06-15T13:00" and a["titik_kejadian_lain"][0]["kejadian"] == "K20260720-1300"
     assert b["kejadian"] == "K20261005-1310" and b["cocok_shp"] is False and b["bulan_shp"] == "2026-08"
+
+
+def test_pemadaman_ditandai_dan_tidak_dipakai_kalibrasi():
+    """Catatan lapangan [[pemadaman]]: kejadian bertanda tetap dihitung, tetapi keluar dari kalibrasi laju api."""
+    cfg = {"aoi": {"epsg": 32750, "west": 600000, "north": 9100000, "east": 640000, "south": 9070000}}
+    g = A.Grid(cfg, 30.0)
+
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.g = g
+    ll = [(-8.2585, 118.1506), (-8.2600, 118.1520), (-8.2585, 118.1506), (-8.30, 118.05)]
+    tt = [dt.datetime(2026, 9, 9, 13, 12), dt.datetime(2026, 9, 10, 13, 30), dt.datetime(2026, 8, 1, 13, 0),
+          dt.datetime(2026, 9, 10, 13, 0)]
+    ctx.hs = [dict(t=t, lat=a, lon=b) for (a, b), t in zip(ll, tt)]
+    x, y = g.ke_utm.transform([b for _, b in ll], [a for a, _ in ll])
+    ctx.xy = np.column_stack([x, y])
+    evs = [dict(id="K20260909-1312", idx=[0, 1]), dict(id="K20260801-1300", idx=[2]), dict(id="K20260910-1300", idx=[3]),
+           dict(id="K20261001-1200", idx=[])]
+    catatan = [dict(dari="2026-09-09", sampai="2026-09-15", lat=-8.2585, lon=118.1506, radius_km=3, catatan="Ada pemadaman."),
+               dict(kejadian="K20261001-1200", catatan="Dipadamkan regu Manggala Agni.")]
+    assert A.tandai_pemadaman(ctx, evs, catatan) == 2
+    assert [ev.get("pemadaman") for ev in evs] == ["Ada pemadaman.", None, None, "Dipadamkan regu Manggala Agni."]
+    # tanggal sama tetapi > 3 km (evs[2]) dan lokasi sama di luar tanggal (evs[1]) tidak ikut
+    rng = np.random.default_rng(1)
+    hasil = {}
+    for i, ev in enumerate(evs):
+        kom = dict(zip(["30", "31", "32", "33", "lain"], rng.dirichlet(np.ones(5)).round(4)))
+        hasil[ev["id"]] = dict(id=ev["id"], tahap="bebas", sorensen=0.6, galat_waktu_jam=0.0, komposisi=kom,
+                               k_p50=0.35 if ev.get("pemadaman") else 1.0, k_p05=0.3, k_p95=1.2)
+    baris, keluar = A.baris_kalibrasi(hasil, evs)
+    assert sorted(h["id"] for h in baris) == ["K20260801-1300", "K20260910-1300"]
+    assert [k["id"] for k in keluar] == ["K20260909-1312", "K20261001-1200"] and keluar[0]["k"] == 0.35
