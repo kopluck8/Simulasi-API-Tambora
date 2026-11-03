@@ -17,6 +17,10 @@ fms = "kalibrasi/tambora_latihan.fms"
 # K1 (30) tetap 1 karena datanya kurang. Hutan TU1 (161) x3,13 dari kelas "lain" (78% TU1).
 # Nilai yang sama untuk FlamMap desktop: kalibrasi/tambora_ros_adjust.adj (ROS Adjust File).
 ros_adjust = { 31 = 0.77, 32 = 0.69, 33 = 1.33, 161 = 3.13 }
+# Koreksi ronde 2 (permintaan Deo 3 Nov 2026), sedang diuji di pemodelan terbalik saja: kalibrasi 13 kejadian tanpa api
+# Piong 9 Sep memberi K3 x0,529 (selang 90% 0,41-0,77) dan kelas lain (TU1 61%, TL6 35%) x1,787 (1,14-1,91) terhadap
+# koreksi di atas; K2 x0,96 (mencakup 1) dan K4 (data kurang) tetap. Dipindah ke ros_adjust bila uji >= 7 kejadian lain lolos.
+ros_adjust_uji = { 31 = 0.77, 32 = 0.365, 33 = 1.33, 161 = 5.59, 186 = 1.79 }
 
 # Catatan lapangan intervensi pemadaman. Kejadian yang cocok tetap dihitung (titik asal, jam mulai), tetapi tidak
 # dipakai untuk kalibrasi laju api karena arah dan lajunya dibelokkan regu pemadam. Cocok bila ada titik panasnya

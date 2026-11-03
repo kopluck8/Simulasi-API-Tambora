@@ -731,7 +731,12 @@ def cmd_asal_api(args, cfg):
     cuaca = A.CuacaUji() if args.cuaca_uji else A.Cuaca(os.path.join(args.kerja, "cuaca"), t_min, t_max,
                                                           cfg["simulasi"]["zona"], cfg["simulasi"]["model_cuaca"])
     fmd, fms = _rel(cfg["kalibrasi"]["fmd"]), _rel(cfg["kalibrasi"]["fms"])
-    ra = {int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()}
+    # ros_adjust_uji (bila ada) hanya dipakai pemodelan terbalik untuk menguji koreksi baru sebelum dipasang ke simulasi
+    ra_sim = {int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()}
+    uji = cfg["kalibrasi"].get("ros_adjust_uji")
+    ra = {int(k): float(v) for k, v in uji.items()} if uji else ra_sim
+    if uji:
+        print("ros_adjust uji (pemodelan terbalik saja):", ra, "| simulasi:", ra_sim)
     ctx = A.Konteks(cfg, ls10, fmd, fms, ra, pts, lin, burn, tn, cuaca, root=ROOT)
     ctx.satuan = satuan
     zona = args.zona_luar_tn if args.zona_luar_tn is not None else cfg["kawasan"].get("zona_luar_tn_m")
@@ -752,7 +757,9 @@ def cmd_asal_api(args, cfg):
                                  s2=os.path.basename(args.bekas_s2) if args.bekas_s2 else None),
              cuaca="uji (buatan)" if args.cuaca_uji else "Open-Meteo ERA5 / ERA5-Land (arsip), prakiraan untuk 6 hari terakhir",
              landscape=os.path.basename(args.lcp) if args.lcp else "GeoTIFF dasar awal kemarau (Drive/dasar)",
-             fmd=cfg["kalibrasi"]["fmd"], fms=cfg["kalibrasi"]["fms"], ros_adjust=cfg["kalibrasi"].get("ros_adjust", {}))
+             fmd=cfg["kalibrasi"]["fmd"], fms=cfg["kalibrasi"]["fms"], ros_adjust={str(k): v for k, v in ra.items()})
+    if uji:
+        m.update(ros_adjust_uji=True, ros_adjust_simulasi={str(k): v for k, v in ra_sim.items()})
     A.tulis_hasil(ctx, evs, info, hasil, gagal, args.status, args.keluaran, meta=m)
 
 

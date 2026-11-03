@@ -102,7 +102,8 @@ function infoData() {
   return 'Diperbarui <b>' + esc(T.tglID(T.keWITA(ST.dibuat), true)) + ' WITA</b><br>' +
     'Titik panas ' + esc(r.length ? tgl(r[0]) + ' – ' + tgl(r[1]) : '–') + (sumber.length ? ' (' + esc(sumber.join(', ')) + ')' : '') + '<br>' +
     'Cuaca: ' + esc(d.cuaca || '–') + '<br>Bahan bakar: ' + esc((d.fmd || '').split('/').pop()) + ', ' + esc((d.fms || '').split('/').pop()) +
-    (teksRa(d.ros_adjust) ? '<br>Koreksi laju api: ' + esc(teksRa(d.ros_adjust)) : '');
+    (teksRa(d.ros_adjust) ? '<br>Koreksi laju api' + (d.ros_adjust_uji ? ' (uji, pemodelan terbalik saja)' : '') + ': ' + esc(teksRa(d.ros_adjust)) : '') +
+    (d.ros_adjust_uji ? '<br>Simulasi masih memakai: ' + esc(teksRa(d.ros_adjust_simulasi) || 'tanpa koreksi') : '');
 }
 
 function teksZona() {
@@ -1129,7 +1130,8 @@ function gambarKalibrasi() {
       (pl.faktor > 1 ? 'Kemungkinan sebagian areal yang dipetakan sebagai hutan sebenarnya savana atau semak terbuka saat kemarau, atau model hutan itu terlalu lambat. Pilihannya: perbaiki peta fuel di tepi hutan yang terbakar, atau sesuaikan ros_adjust untuk kode ' + (utama ? utama.kode : 'hutan') + '.' : '');
   }
   if (bacaan) t += '<p class="small as-bacaan"><b>Bacaan:</b> ' + bacaan + '</p>';
-  t += '<p class="petunjuk">' + (adaRa ? 'Koreksi yang sedang dipakai simulasi dan pemodelan terbalik: <b>' + esc(teksRa(ra)) + '</b>. Faktor di atas dihitung dari simulasi yang sudah memakai koreksi ini, jadi ×1 berarti koreksinya sudah pas, dan saran = ros_adjust sekarang × faktor. Saran baru <b>tidak diterapkan otomatis</b>. ' :
+  const dd = ST.data || {};
+  t += '<p class="petunjuk">' + (adaRa ? (dd.ros_adjust_uji ? 'Koreksi <b>uji</b> yang dipakai pemodelan terbalik ini: <b>' + esc(teksRa(ra)) + '</b> (simulasi masih memakai ' + esc(teksRa(dd.ros_adjust_simulasi) || 'tanpa koreksi') + ' sampai uji selesai).' : 'Koreksi yang sedang dipakai simulasi dan pemodelan terbalik: <b>' + esc(teksRa(ra)) + '</b>.') + ' Faktor di atas dihitung dari simulasi yang sudah memakai koreksi ini, jadi ×1 berarti koreksinya sudah pas, dan saran = ros_adjust sekarang × faktor. Saran baru <b>tidak diterapkan otomatis</b>. ' :
     'Saran ini <b>belum diterapkan</b> ke simulasi. ') + 'Bila disetujui, nilainya diisi di <code>[kalibrasi] ros_adjust</code> pada <code>config/tambora.toml</code> (contoh <code>{ 30 = 0.9, 31 = 1.1 }</code>), lalu simulasi dan pemodelan terbalik memakai fmd20 yang sudah dikoreksi. ' +
     'Kelas dengan bobot data &lt; 1 belum cukup terwakili. Faktor k satu kejadian juga memuat galat angin ERA5 dan peta bahan bakar, jadi pakai nilai gabungan, bukan satu kejadian.</p>';
   if ((kal.dikecualikan || []).length) {
