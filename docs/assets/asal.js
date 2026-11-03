@@ -112,7 +112,7 @@ function teksZona() {
 }
 function teksRa(ra) {
   const k = Object.keys(ra || {}).sort((a, b) => +a - +b);
-  return k.map((c) => (NAMA_PENDEK_FUEL[c] || 'fuel ' + c) + ' ×' + angka(+ra[c], 2)).join(', ');
+  return k.map((c) => (NAMA_PENDEK_FUEL[c] || 'fuel ' + c) + ' ×' + angka(+ra[c], 3)).join(', ');
 }
 const NAMA_PENDEK_FUEL = { 30: 'K1', 31: 'K2', 32: 'K3', 33: 'K4', 161: 'TU1', 186: 'TL6', 142: 'SH2' };
 
@@ -1116,7 +1116,7 @@ function gambarKalibrasi() {
       const beda = !cukup ? '<span class="muted">data kurang</span>' : nyata(p) ? '<b>nyata</b> (' + (p.faktor > 1 ? 'api nyata lebih cepat' : 'api nyata lebih lambat') + ')' : 'belum nyata';
       const nama = c === 'lain' && teksRinci ? esc(NAMA_KELAS[c]) + '<br><span class="muted small">' + teksRinci + '</span>' : esc(NAMA_KELAS[c]);
       return '<tr><td>' + nama + '</td><td>×' + angka(p.faktor, 2) + '</td><td>' + angka(p.p05, 2) + '–' + angka(p.p95, 2) + '</td><td>' + beda + '</td><td>' + angka(p.n_efektif, 1) + '</td><td>' +
-        (c === 'lain' ? '–' : angka(now, 2)) + '</td><td>' + saran + '</td></tr>';
+        (c === 'lain' ? '–' : angka(now, 3)) + '</td><td>' + saran + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   const kNyata = kelas.filter((c) => c !== 'lain' && (kal.kelas[c] || {}).n_efektif >= 1 && nyata(kal.kelas[c]));
   const kBelum = kelas.filter((c) => c !== 'lain' && (kal.kelas[c] || {}).n_efektif >= 1 && !nyata(kal.kelas[c]));

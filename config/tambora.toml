@@ -12,15 +12,17 @@ latitude = -8
 [kalibrasi]
 fmd = "kalibrasi/tambora_savana_cepat20.fmd"   # savana K1-K4 hasil kalibrasi (fmd20)
 fms = "kalibrasi/tambora_latihan.fms"
-# Koreksi laju api per kode fuel (ROS x faktor). Dari pemodelan terbalik 2 Nov 2026 (33 kejadian
-# yang terlihat >= 2 lintasan satelit), diterapkan atas persetujuan Deo 3 Nov 2026 (WITA).
-# K1 (30) tetap 1 karena datanya kurang. Hutan TU1 (161) x3,13 dari kelas "lain" (78% TU1).
+# Koreksi laju api per kode fuel (ROS x faktor), dari pemodelan terbalik kejadian yang terlihat >= 2 lintasan satelit.
+# Dipakai simulasi (MTT, FARSITE, Simulasi 3D) dan pemodelan terbalik. K1 (30) tetap 1 karena datanya kurang.
+# Ronde 1 (2 Nov 2026, 33 kejadian, disetujui Deo 3 Nov): K2 (31) x0,77, K3 (32) x0,69, K4 (33) x1,33, TU1 (161) x3,13.
+# Ronde 2 (3 Nov 2026, 13 kejadian tanpa api Piong 9 Sep yang ada pemadamannya): K3 x0,529 lagi (selang 90% 0,41-0,77)
+# dan kelas "lain" di tepi hutan (TU1 61%, TL6 35%) x1,787 (1,14-1,91); K2 x0,96 (mencakup 1) dan K4 (data kurang) tetap.
+# Ronde 2 diuji dulu di 17 kejadian lain yang tidak ikut kalibrasi (faktor k lebih dekat ke 1, galat waktu median
+# 8,8 -> 7,7 jam), lalu diterapkan ke simulasi atas permintaan Deo 3 Nov 2026 (WITA).
 # Nilai yang sama untuk FlamMap desktop: kalibrasi/tambora_ros_adjust.adj (ROS Adjust File).
-ros_adjust = { 31 = 0.77, 32 = 0.69, 33 = 1.33, 161 = 3.13 }
-# Koreksi ronde 2 (permintaan Deo 3 Nov 2026), sedang diuji di pemodelan terbalik saja: kalibrasi 13 kejadian tanpa api
-# Piong 9 Sep memberi K3 x0,529 (selang 90% 0,41-0,77) dan kelas lain (TU1 61%, TL6 35%) x1,787 (1,14-1,91) terhadap
-# koreksi di atas; K2 x0,96 (mencakup 1) dan K4 (data kurang) tetap. Dipindah ke ros_adjust bila uji >= 7 kejadian lain lolos.
-ros_adjust_uji = { 31 = 0.77, 32 = 0.365, 33 = 1.33, 161 = 5.59, 186 = 1.79 }
+ros_adjust = { 31 = 0.77, 32 = 0.365, 33 = 1.33, 161 = 5.59, 186 = 1.79 }
+# Untuk menguji koreksi baru di pemodelan terbalik saja tanpa mengubah simulasi, isi juga
+# ros_adjust_uji = { ... } (semua kode, bukan hanya yang berubah), lalu jalankan workflow Asal Api.
 
 # Catatan lapangan intervensi pemadaman. Kejadian yang cocok tetap dihitung (titik asal, jam mulai), tetapi tidak
 # dipakai untuk kalibrasi laju api karena arah dan lajunya dibelokkan regu pemadam. Cocok bila ada titik panasnya
