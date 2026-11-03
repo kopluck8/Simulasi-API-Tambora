@@ -430,10 +430,25 @@ function teksMulai(w) {
   return 'Api mulai (pemodelan terbalik): <b>' + esc(tglPendek(w.mulai) + ' ' + jam(w.mulai)) + ' WITA</b>' +
     (a && b ? ' <span class="muted">(90%: ' + esc(rentangWaktu(a, b)) + ')</span>' : '') + ' ' + lencanaMutu(w.mutu);
 }
+/* bulan/tanggal terbakar yang dicatat di atribut SHP delineasi (kolom Bulan, Tanggal) */
+function bulanShp(w) {
+  if (!w || !w.bulan_shp) return '';
+  return w.tanggal_shp ? tgl(w.tanggal_shp) : BULAN_PANJANG[+w.bulan_shp.slice(5, 7) - 1] + ' ' + w.bulan_shp.slice(0, 4);
+}
+function teksShp(w) {
+  const b = bulanShp(w);
+  if (!b) return '';
+  const t = (w.tanggal_shp ? 'Tanggal' : 'Bulan') + ' terbakar di SHP: <b>' + esc(b) + '</b>';
+  if (w.cocok_shp === true) return t + ' · sesuai dengan titik panas';
+  if (w.cocok_shp === false) return t + ' · <b>berbeda</b>: tidak ada titik panas pada ' + (w.tanggal_shp ? 'tanggal' : 'bulan') + ' itu di dalam atau ≤ 400 m dari bidang, jadi waktu di atas dari titik panas ' + (w.tanggal_shp ? 'di luar tanggal itu' : 'bulan lain');
+  return t;
+}
 function tooltipBidang(p) {
   const w = (BW || {})[p.id] || {};
   return '<b>' + esc(p.id) + '</b> · ' + angka(p.luas_ha, 1) + ' ha' +
-    (w.waktu_awal ? '<br>Terbakar ' + esc(rentangWaktu(w.waktu_awal, w.waktu_akhir)) + (w.bagian ? ' (' + w.bagian.length + ' kejadian)' : '') : (BW ? '<br><span class="muted">waktu terbakar tidak diketahui</span>' : ''));
+    (w.waktu_awal ? '<br>Terbakar ' + esc(rentangWaktu(w.waktu_awal, w.waktu_akhir)) + (w.bagian ? ' (' + w.bagian.length + ' kejadian)' : '') +
+      (w.cocok_shp === false ? '<br><span class="muted">SHP: ' + esc(bulanShp(w)) + ' (berbeda)</span>' : '')
+      : (w.bulan_shp ? '<br>Terbakar ' + esc(bulanShp(w)) + ' <span class="muted">(menurut SHP)</span>' : (BW ? '<br><span class="muted">waktu terbakar tidak diketahui</span>' : '')));
 }
 function popupBidang(p) {
   const w = (BW || {})[p.id] || {};
@@ -445,8 +460,10 @@ function popupBidang(p) {
     h += '<p>Terbakar oleh <b>' + w.bagian.length + ' kejadian</b> berbeda waktu (bidang dibagi menurut titik panasnya):</p><ul>' +
       w.bagian.map((x) => '<li><b>' + esc(rentangWaktu(x.waktu_awal, x.waktu_akhir)) + '</b>' + (x.luas_bagian_ha ? ' · ±' + angka(x.luas_bagian_ha) + ' ha' : '') +
         ' · ' + x.n_titik + ' titik panas di bidang' + (x.mulai || x.catatan ? '<br>' + teksMulai(x) : '') + tombolKejadian(x.kejadian) + '</li>').join('') + '</ul>';
+    if (w.bulan_shp) h += '<p class="small">' + teksShp(w) + '</p>';
   } else if (w.waktu_awal) {
     h += '<p>Waktu terbakar: <b>' + esc(rentangWaktu(w.waktu_awal, w.waktu_akhir)) + ' WITA</b><br><span class="small muted">' + esc(teksSumber(w)) + '</span></p>';
+    if (w.bulan_shp) h += '<p class="small">' + teksShp(w) + '</p>';
     const ts = w.tiba_simulasi;
     if (ts && ts.tengah && w.sumber !== 'jam tiba api simulasi') h += '<p class="small">Jam tiba api di bidang menurut simulasi: ' + esc(rentangWaktu(ts.awal, ts.akhir)) + (ts.tercapai < 90 ? ' (' + angka(ts.tercapai) + '% bidang tercapai)' : '') + '</p>';
     const m = teksMulai(w);
@@ -456,6 +473,7 @@ function popupBidang(p) {
     h += '<p class="small">' + (w.sumber === 'tanpa titik panas' || !w.sumber
       ? 'Tidak ada titik panas di dalam atau ≤ 400 m dari bidang ini, jadi waktu terbakarnya belum bisa ditentukan dari data satelit.'
       : 'Waktu terbakar tidak pasti.' + (w.catatan ? ' ' + esc(w.catatan) + '.' : '')) + '</p>';
+    if (w.bulan_shp) h += '<p>' + teksShp(w) + '</p>';
   }
   if (w.titik_kejadian_lain && w.titik_kejadian_lain.length) {
     const n = w.titik_kejadian_lain.reduce((s_, x) => s_ + x.n, 0);
@@ -477,21 +495,24 @@ function tabelBidang(e) {
   if (!ids.length) return '';
   const luas = {};
   ((lapis.arealData && lapis.arealData.features) || []).forEach((f) => { luas[f.properties.id] = f.properties.luas_ha; });
+  const adaShp = ids.some((id) => BW[id].bulan_shp);
   const baris = ids.map((id) => {
     const w = BW[id], x = bagianUntuk(w, e.id), ts = x.tiba_simulasi || {};
     return '<tr><td class="kiri"><button class="tautan" data-bidang="' + esc(id) + '">' + esc(id) + '</button>' + (w.bagian ? ' <span class="muted">(dibagi ' + w.bagian.length + ')</span>' : '') + '</td>' +
       '<td>' + angka(x.luas_bagian_ha != null ? x.luas_bagian_ha : luas[id], 1) + '</td><td>' + (x.n_titik || 0) + (x.n_titik_dekat ? ' <span class="muted">+' + x.n_titik_dekat + ' dekat</span>' : '') + '</td>' +
-      '<td>' + esc(rentangWaktu(x.waktu_awal, x.waktu_akhir)) + '</td><td>' + (ts.tengah ? esc(rentangWaktu(ts.awal, ts.akhir)) : '–') + '</td></tr>';
+      '<td>' + esc(rentangWaktu(x.waktu_awal, x.waktu_akhir)) + '</td><td>' + (ts.tengah ? esc(rentangWaktu(ts.awal, ts.akhir)) : '–') + '</td>' +
+      (adaShp ? '<td>' + (w.bulan_shp ? esc(bulanShp(w)) + (x.cocok_shp === false ? ' <span class="muted">(berbeda)</span>' : '') : '–') + '</td>' : '') + '</tr>';
   });
-  return '<table><thead><tr><th class="kiri">Bidang</th><th>Luas (ha)</th><th>Titik panas di bidang</th><th>Waktu terbakar (WITA)</th><th>Jam tiba api simulasi</th></tr></thead><tbody>' + baris.join('') + '</tbody></table>' +
-    '<p class="small muted">Waktu terbakar = deteksi titik panas pertama sampai terakhir di dalam bidang (bila tidak ada: titik panas ≤ 400 m). Jam tiba api simulasi = persentil 10–90 sel bidang dari simulasi terbaik.</p>';
+  return '<table><thead><tr><th class="kiri">Bidang</th><th>Luas (ha)</th><th>Titik panas di bidang</th><th>Waktu terbakar (WITA)</th><th>Jam tiba api simulasi</th>' + (adaShp ? '<th>Bulan di SHP</th>' : '') + '</tr></thead><tbody>' + baris.join('') + '</tbody></table>' +
+    '<p class="small muted">Waktu terbakar = deteksi titik panas pertama sampai terakhir di dalam bidang (bila tidak ada: titik panas ≤ 400 m). Jam tiba api simulasi = persentil 10–90 sel bidang dari simulasi terbaik.' + (adaShp ? ' Bulan di SHP = kolom Bulan/Tanggal di SHP delineasi; bila di sekitar bidang ada api dari beberapa bulan, titik panas bulan itu yang dipakai.' : '') + '</p>';
 }
 function sifatBidang(p) {
   const w = (BW || {})[p.id] || {}, ts = w.tiba_simulasi || {};
   const o = { id: p.id, luas_ha: p.luas_ha, resort: p.resort, luar_kawasan: p.luar_kawasan, tn_persen: p.tn_persen, tgl_delineasi: p.tanggal,
     file: p.file, lapis: p.lapis, fid: p.fid, kejadian: w.kejadian || null, sumber_waktu: w.sumber || null,
     terbakar_awal_wita: w.waktu_awal || null, terbakar_akhir_wita: w.waktu_akhir || null, n_titik_di_bidang: w.n_titik || 0,
-    n_titik_dekat: w.n_titik_dekat || 0, mulai_kejadian_wita: w.mulai || null, mulai_p05_wita: w.mulai_p05 || null,
+    n_titik_dekat: w.n_titik_dekat || 0, bulan_shp: w.bulan_shp || null, tanggal_shp: w.tanggal_shp || null,
+    cocok_shp: w.cocok_shp == null ? null : w.cocok_shp, mulai_kejadian_wita: w.mulai || null, mulai_p05_wita: w.mulai_p05 || null,
     mulai_p95_wita: w.mulai_p95 || null, mutu: w.mutu || null, tiba_sim_awal_wita: ts.awal || null, tiba_sim_tengah_wita: ts.tengah || null,
     tiba_sim_akhir_wita: ts.akhir || null, tiba_sim_tercapai_persen: ts.tercapai != null ? ts.tercapai : null,
     kejadian_bagian: (w.bagian || []).map((x) => x.kejadian + ' (' + (x.luas_bagian_ha != null ? x.luas_bagian_ha + ' ha, ' : '') + (x.waktu_awal || '') + ' s.d. ' + (x.waktu_akhir || '') + ')').join('; ') || null,
@@ -1127,7 +1148,7 @@ function gambarMetode() {
   $('asMetode').innerHTML =
     '<h3>Langkah perhitungan</h3><ol>' +
     '<li><b>Titik panas</b> VIIRS (375 m) dan MODIS (1 km) dari SiPongi dan NASA FIRMS dikonversi ke WITA. Titik berkeyakinan rendah hanya dipakai bila berada ≤ 400 m dari areal terbakar.</li>' +
-    '<li><b>Kejadian</b>: titik panas digabung bila berjarak ≤ ' + angka((p.jarak_kelompok_m || 1500) / 1000, 1) + ' km dan ≤ ' + (p.jeda_kelompok_jam || 36) + ' jam, atau tersambung oleh areal terbakar (api cepat di antara dua lintasan satelit).' + (d.zona_luar_tn_m != null ? ' Kejadian di luar kawasan hanya dihitung bila titik panas atau areal terbakarnya berjarak ≤ ' + angka(d.zona_luar_tn_m / 1000, 1) + ' km dari batas TN; areal kejadian yang dihitung tetap utuh walaupun sebagian lebih jauh.' : '') + ' ' + (d.bidang ? 'Areal terbakar memakai <b>bidang delineasi apa adanya</b> (tidak digabung, luas sesuai SHP). Tiap bidang menjadi milik kejadian yang titik panasnya ada di dalam bidang; titik panas di tepi bidang (< 200 m) dari kejadian yang punya bidang sendiri dianggap limpahan piksel satelit dari bidang sebelah. Bidang yang memuat titik panas dua kejadian berbeda waktu jauh di dalamnya dibagi menurut titik panas terdekat. <b>Waktu terbakar tiap bidang</b> = deteksi titik panas pertama sampai terakhir di dalam bidang (bila tidak ada: titik panas ≤ 400 m, lalu jam tiba api simulasi); jam mulai api tetap per kejadian dari pemodelan terbalik.' : 'Areal terbakar hasil delineasi dibagi ke kejadian menurut titik panas terdekat.') + ' Areal kejadian lebih awal menjadi tidak bisa terbakar (fuel 99) untuk kejadian sesudahnya.</li>' +
+    '<li><b>Kejadian</b>: titik panas digabung bila berjarak ≤ ' + angka((p.jarak_kelompok_m || 1500) / 1000, 1) + ' km dan ≤ ' + (p.jeda_kelompok_jam || 36) + ' jam, atau tersambung oleh areal terbakar (api cepat di antara dua lintasan satelit).' + (d.zona_luar_tn_m != null ? ' Kejadian di luar kawasan hanya dihitung bila titik panas atau areal terbakarnya berjarak ≤ ' + angka(d.zona_luar_tn_m / 1000, 1) + ' km dari batas TN; areal kejadian yang dihitung tetap utuh walaupun sebagian lebih jauh.' : '') + ' ' + (d.bidang ? 'Areal terbakar memakai <b>bidang delineasi apa adanya</b> (tidak digabung, luas sesuai SHP). Tiap bidang menjadi milik kejadian yang titik panasnya ada di dalam bidang; titik panas di tepi bidang (< 200 m) dari kejadian yang punya bidang sendiri dianggap limpahan piksel satelit dari bidang sebelah. Bidang yang memuat titik panas dua kejadian berbeda waktu jauh di dalamnya dibagi menurut titik panas terdekat. <b>Waktu terbakar tiap bidang</b> = deteksi titik panas pertama sampai terakhir di dalam bidang (bila tidak ada: titik panas ≤ 400 m, lalu jam tiba api simulasi); jam mulai api tetap per kejadian dari pemodelan terbalik. Bila SHP mencatat bulan atau tanggal terbakar (kolom Bulan/Tanggal) dan di sekitar bidang ada titik panas dari beberapa waktu, hanya kejadian pada bulan itu (±3 hari; tanggal ±5 hari) yang boleh memiliki bidang; bila tidak ada titik panas pada waktu itu, aturan biasa dipakai dan bidang ditandai berbeda.' : 'Areal terbakar hasil delineasi dibagi ke kejadian menurut titik panas terdekat.') + ' Areal kejadian lebih awal menjadi tidak bisa terbakar (fuel 99) untuk kejadian sesudahnya.</li>' +
     '<li><b>Cuaca</b> per jam ERA5/ERA5-Land (Open-Meteo, sama dengan pembuat .wxs) di lokasi tiap kejadian, mulai 3 hari sebelumnya untuk pengkondisian kadar air bahan bakar (fms). Angin diarahkan medan seperti pada simulasi.</li>' +
     '<li><b>Simulasi mundur</b>: dari tiap titik panas, waktu rambat dihitung terbalik (arah angin dibalik) di landscape dan fmd20. Hasilnya, untuk tiap sel peta, jam paling akhir api bisa menyala di sel itu agar masih sampai di piksel satelit pada jam deteksinya. Sel yang cocok dengan semua titik panas sekaligus menjadi kandidat titik asal, dengan jam mulai yang sesuai. Lintasan satelit yang lewat sebelum deteksi pertama tanpa melihat api ikut membatasi jam mulai.</li>' +
     '<li><b>Simulasi maju</b> dari kandidat terbaik (FARSITE, ' + (p.k_bebas || []).length + ' faktor laju api k dari ×' + angka((p.k_bebas || [0.35])[0], 2) + ' sampai ×' + angka((p.k_bebas || [2.83]).slice(-1)[0], 2) + '): dinilai dari kecocokan waktu (api menyala di piksel satelit pada jam lintasan) dan kecocokan bentuk areal terbakar (Sørensen). Hasilnya zona asal peluang 50% dan 90%, sebaran jam mulai, faktor k, dan garis waktu rambat.</li>' +
@@ -1139,7 +1160,7 @@ function gambarMetode() {
       (d.zona_luar_tn_m != null ? ', ' + angka(d.kejadian_zona) + ' di dalam ' + esc(teksZona()) + ' (' + angka(d.kejadian_luar_zona) + ' kelompok lebih jauh tidak dihitung)' : '') +
       '; ' + angka(r.dianalisis) + ' kejadian dengan areal terbakar ≥ 1 ha (' + angka(r.luas_dianalisis_ha) + ' ha).</li>' +
     '<li>Berhasil dihitung ' + angka(r.berhasil) + ' kejadian: mutu baik ' + (mutu.baik || 0) + ', sedang ' + (mutu.sedang || 0) + ', rendah ' + (mutu.rendah || 0) + (r.gagal ? ', tidak terhitung ' + r.gagal : '') + '.</li>' +
-    (d.bidang ? '<li>' + angka(d.bidang) + ' bidang delineasi: ' + angka(d.bidang_titik_di_dalam) + ' dengan titik panas di dalamnya, ' + angka(d.bidang_titik_dekat) + ' hanya dengan titik panas ≤ 400 m, ' + angka(d.bidang_tanpa_titik) + ' tanpa titik panas (waktu terbakar tidak diketahui). Klik bidang di peta untuk melihat waktunya.</li>' : '') +
+    (d.bidang ? '<li>' + angka(d.bidang) + ' bidang delineasi: ' + angka(d.bidang_titik_di_dalam) + ' dengan titik panas di dalamnya, ' + angka(d.bidang_titik_dekat) + ' hanya dengan titik panas ≤ 400 m, ' + angka(d.bidang_tanpa_titik) + ' tanpa titik panas (waktu terbakar tidak diketahui).' + (d.bidang_bulan_shp ? ' ' + angka(d.bidang_bulan_shp) + ' bidang punya bulan terbakar di SHP: ' + angka(d.bidang_cocok_shp || 0) + ' sesuai dengan titik panas, ' + angka(d.bidang_beda_shp || 0) + ' berbeda (tidak ada titik panas pada bulan itu di sekitarnya).' : '') + ' Klik bidang di peta untuk melihat waktunya.</li>' : '') +
     '<li>Areal terbakar tanpa titik panas di dekatnya: ' + angka(d.areal_tanpa_titik_panas_ha) + ' ha' + (tanpa.length ? ' (' + tanpa.length + ' poligon ≥ 5 ha, terbesar ' + angka(tanpa[0].luas_ha) + ' ha di ' + esc(tanpa[0].resort || 'luar resort') + ')' : '') + '. Areal ini tidak bisa diduga asalnya.</li>' +
     '<li>Landscape: ' + esc(d.landscape || '–') + '. Bahan bakar: ' + esc(d.fmd || '–') + ', ' + esc(d.fms || '–') + '. Sel hitung ' + (p.sel_m || 30) + ' m.</li></ul>' +
     '<h3>Keterbatasan</h3><ul>' +

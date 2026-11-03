@@ -32,6 +32,11 @@ Sistem koordinat bebas (UTM 50S, WGS84, dan lainnya) asalkan ada `.prj`. Hanya p
   tampil dengan luasnya sendiri, karena bidang bersebelahan bisa terbakar pada bulan berbeda. Waktu terbakar tiap
   bidang ditentukan dari jam titik panas yang jatuh di bidang itu (tab Asal Api). Poligon yang dikirim lagi di file
   lebih baru (bentuknya hampir sama, IoU ≥ 0,9) dianggap bidang yang sama, jadi tidak dobel.
+- **Kolom Bulan / Tanggal (opsional).** Bila atribut SHP punya kolom `Bulan` (nama bulan, mis. `Agustus`, atau angka
+  `8`), `Tanggal` (nomor hari atau tanggal lengkap), dan `Tahun`, isinya dipakai sebagai petunjuk: bila di sekitar
+  bidang ada titik panas dari beberapa bulan, titik panas pada bulan itu (±3 hari; tanggal ±5 hari) yang menentukan
+  waktu terbakar bidang. Bila tidak ada titik panas pada bulan itu, waktu tetap dari titik panas terdekat dan bidang
+  ditandai "berbeda" di peta, supaya bisa dicek. Bidang tanpa titik panas sama sekali diwarnai menurut bulan di SHP.
 - Untuk memperbaiki delineasi: ganti atau hapus file yang salah. Bila tiap file selalu kumulatif dan koreksi yang
   memperkecil areal harus ikut terpakai, ubah `mode = "terbaru"` di [`config/tambora.toml`](../config/tambora.toml).
 

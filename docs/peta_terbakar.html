@@ -47,6 +47,7 @@ details.catatan li{margin:4px 0}
 .mode{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}
 .mode select{font:inherit;font-size:13px;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 .lg-api i.tak{background:#9e9e9e;outline:1px dashed #fff;outline-offset:-2px}
+.lg-api i.shp{background:#feac5c;outline:1.5px dashed #fff;outline-offset:-2px}
 .pop p{margin:6px 0 0}
 .pop ul{margin:4px 0 0;padding-left:18px}
 .pop li{margin:3px 0}
@@ -157,7 +158,7 @@ details.catatan li{margin:4px 0}
         '<input type="range" id="geser" min="0" max="' + (r.length - 1) + '" step="1" value="' + S.idx + '">' : '<div class="waktu">') +
       '<div class="lg-api" id="legenda"></div>' +
       (S.bidang.length && S.bw ? '<div class="mode"><label for="warnaBidang">Warna bidang</label><select id="warnaBidang">' +
-        '<option value="delineasi">Tanggal delineasi</option><option value="bulan">Bulan terbakar (titik panas)</option></select></div>' : '') + '</div>' +
+        '<option value="delineasi">Tanggal delineasi</option><option value="bulan">Bulan terbakar</option></select></div>' : '') + '</div>' +
       '<div class="blok"><h2>Per resort</h2><div id="perResort"></div></div>' +
       '<div class="blok"><h2>Riwayat delineasi (luas baru di kawasan)</h2><div id="riwayat"></div></div>' + catatan();
     if ($('geser')) $('geser').addEventListener('input', function (e) { pilih(+e.target.value); });
@@ -177,7 +178,7 @@ details.catatan li{margin:4px 0}
       (S.bidang.length && S.bw ? '<a href="#" id="unduhCsv">CSV bidang + waktu terbakar</a>' : '') +
       '<a href="status/areal_terbakar.json">Rekap JSON</a></p>' +
       (S.bidang.length ? '<p>Peta menampilkan ' + S.bidang.length + ' bidang delineasi apa adanya (tidak digabung), masing-masing dengan luasnya sendiri. ' +
-        (S.bw ? 'Klik bidang untuk melihat <b>waktu terbakar</b>: deteksi titik panas pertama sampai terakhir di dalam bidang itu (tab Asal Api). Jam mulai api tetap dari pemodelan terbalik per kejadian.' : 'Waktu terbakar per bidang muncul setelah pemodelan terbalik berikutnya.') + '</p>' : '') +
+        (S.bw ? 'Klik bidang untuk melihat <b>waktu terbakar</b>: deteksi titik panas pertama sampai terakhir di dalam bidang itu (tab Asal Api). Bila kolom Bulan/Tanggal di SHP terisi, titik panas pada bulan itu yang dipakai saat di sekitar bidang ada api dari beberapa bulan. Jam mulai api tetap dari pemodelan terbalik per kejadian.' : 'Waktu terbakar per bidang muncul setelah pemodelan terbalik berikutnya.') + '</p>' : '') +
       '<p>Luas total dan per resort dihitung di UTM 50S dari delineasi gabungan, jadi bidang yang tumpang tindih tidak dihitung dua kali. ' +
       (st.diperbarui ? 'Diolah ' + esc(new Date(st.diperbarui).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Makassar' })) + ' WITA.' : '') + '</p>' +
       (p.length ? '<details class="catatan"><summary>Catatan pengolahan (' + p.length + ')</summary><ul>' + p.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></details>' : '') +
@@ -197,11 +198,30 @@ details.catatan li{margin:4px 0}
     if (w.bagian) { for (var j = 0; j < w.bagian.length; j++) if (w.bagian[j].kejadian === w.kejadian) return w.bagian[j].waktu_awal || w.waktu_awal; }
     return w.waktu_awal || null;
   }
+  // bulan terbakar bidang: dari titik panas; bila tidak ada, dari kolom Bulan/Tanggal di SHP (ditandai garis putus-putus)
+  function bulanBidang(id) {
+    var w = S.bw && S.bw[id], t = waktuUtama(w);
+    if (t) return { bulan: t.slice(0, 7), shp: false };
+    return w && w.bulan_shp ? { bulan: w.bulan_shp, shp: true } : null;
+  }
+  function bulanShp(w) {
+    var BP = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    if (!w || !w.bulan_shp) return '';
+    return w.tanggal_shp ? tgl(w.tanggal_shp) : BP[+w.bulan_shp.slice(5, 7) - 1] + ' ' + w.bulan_shp.slice(0, 4);
+  }
+  function teksShp(w) {
+    var b = bulanShp(w);
+    if (!b) return '';
+    var t = (w.tanggal_shp ? 'Tanggal' : 'Bulan') + ' terbakar di SHP: <b>' + esc(b) + '</b>';
+    if (w.cocok_shp === true) return t + ' · sesuai dengan titik panas';
+    if (w.cocok_shp === false) return t + ' · <b>berbeda</b>: tidak ada titik panas pada ' + (w.tanggal_shp ? 'tanggal' : 'bulan') + ' itu di dalam atau ≤ 400 m dari bidang';
+    return t;
+  }
   function siapkanBulan() {
     S.bulan = [];
     if (!S.bw) return;
     var ada = {};
-    Object.keys(S.bw).forEach(function (k) { var t = waktuUtama(S.bw[k]); if (t) ada[t.slice(0, 7)] = (ada[t.slice(0, 7)] || 0) + 1; });
+    S.bidang.forEach(function (f) { var b = bulanBidang(f.properties.id); if (b) ada[b.bulan] = (ada[b.bulan] || 0) + 1; });
     var b = Object.keys(ada).sort(), n = RAMP_BULAN.length;
     var lipat = b.length > n ? b.slice(0, b.length - n + 1) : [];      // bulan awal yang sedikit dilipat jadi satu kelas
     var kelas = lipat.length ? [{ dari: lipat[0], sampai: lipat[lipat.length - 1] }] : [];
@@ -211,9 +231,9 @@ details.catatan li{margin:4px 0}
     S.bulan = kelas;
   }
   function kelasBulan(id) {
-    var t = waktuUtama(S.bw && S.bw[id]);
-    if (!t) return -1;
-    var mm = t.slice(0, 7);
+    var b = bulanBidang(id);
+    if (!b) return -1;
+    var mm = b.bulan;
     for (var j = 0; j < S.bulan.length; j++) if (mm >= S.bulan[j].dari && mm <= S.bulan[j].sampai) return j;
     return -1;
   }
@@ -225,15 +245,18 @@ details.catatan li{margin:4px 0}
     var el = $('legenda');
     if (!el) return;
     if (S.mode === 'bulan' && S.bw) {
+      var adaShp = S.bidang.some(function (f) { var b = bulanBidang(f.properties.id); return b && b.shp; });
       el.innerHTML = S.bulan.map(function (k) { return '<span><i style="background:' + RAMP_BULAN[k.warna] + '"></i>' + esc(namaBulan(k)) + '</span>'; }).join('') +
-        '<span><i class="tak"></i>Waktu tidak diketahui</span>';
+        (adaShp ? '<span><i class="shp"></i>Bulan dari SHP (tanpa titik panas)</span>' : '') + '<span><i class="tak"></i>Waktu tidak diketahui</span>';
       return;
     }
     el.innerHTML = '<span><i style="background:' + WARNA_BARU + '"></i>Baru ' + esc(tgl(d)) + '</span><span><i style="background:' + WARNA_LAMA + '"></i>Delineasi sebelumnya</span>';
   }
   function tooltipBidang(p) {
     var w = S.bw && S.bw[p.id];
-    return '<b>' + esc(p.id) + '</b> · ' + angka(p.luas_ha, 1) + ' ha' + (w && w.waktu_awal ? '<br>Terbakar ' + esc(rentang(w.waktu_awal, w.waktu_akhir)) + (w.bagian ? ' (' + w.bagian.length + ' kejadian)' : '') : (S.bw ? '<br>waktu terbakar tidak diketahui' : ''));
+    return '<b>' + esc(p.id) + '</b> · ' + angka(p.luas_ha, 1) + ' ha' + (w && w.waktu_awal ? '<br>Terbakar ' + esc(rentang(w.waktu_awal, w.waktu_akhir)) + (w.bagian ? ' (' + w.bagian.length + ' kejadian)' : '') +
+      (w.cocok_shp === false ? '<br>SHP: ' + esc(bulanShp(w)) + ' (berbeda)' : '')
+      : (w && w.bulan_shp ? '<br>Terbakar ' + esc(bulanShp(w)) + ' (menurut SHP)' : (S.bw ? '<br>waktu terbakar tidak diketahui' : '')));
   }
   function tautan(id) { return id ? ' <a href="index.html#asal/' + encodeURIComponent(id) + '">Lihat kejadian</a>' : ''; }
   function mulaiTeks(w) {
@@ -250,15 +273,18 @@ details.catatan li{margin:4px 0}
         return '<li><b>' + esc(rentang(x.waktu_awal, x.waktu_akhir)) + '</b>' + (x.luas_bagian_ha ? ' · ±' + angka(x.luas_bagian_ha) + ' ha' : '') + ' · ' + x.n_titik + ' titik panas' +
           (x.mulai || x.catatan ? '<br>' + mulaiTeks(x) : '') + (x.mulai ? tautan(x.kejadian) : '') + '</li>';
       }).join('') + '</ul>';
+      if (w.bulan_shp) h += '<p>' + teksShp(w) + '</p>';
     } else if (w.waktu_awal) {
       var sumber = w.sumber === 'titik panas di bidang' ? w.n_titik + ' titik panas di dalam bidang'
         : (w.sumber === 'titik panas dekat (≤ 400 m)' ? 'tidak ada titik panas di dalam; dari ' + w.n_titik_dekat + ' titik panas ≤ 400 m' : 'dari jam tiba api simulasi');
       h += '<p>Waktu terbakar: <b>' + esc(rentang(w.waktu_awal, w.waktu_akhir)) + ' WITA</b><br><span class="redup">' + esc(sumber) + '</span></p>';
+      if (w.bulan_shp) h += '<p>' + teksShp(w) + '</p>';
       var m = mulaiTeks(w);
       if (m) h += '<p>' + m + '</p>';
       if (w.mulai) h += tautan(w.kejadian);
     } else {
       h += '<p>Tidak ada titik panas di dalam atau ≤ 400 m dari bidang ini, jadi waktu terbakarnya belum bisa ditentukan dari data satelit.</p>';
+      if (w.bulan_shp) h += '<p>' + teksShp(w) + '</p>';
     }
     if (w.titik_kejadian_lain && w.titik_kejadian_lain.length) {
       h += '<p class="redup">Ada juga titik panas kejadian lain di tepi/dalam bidang (' + w.titik_kejadian_lain.map(function (x) { return esc(tglPendek(x.awal)) + ': ' + x.n; }).join(', ') +
@@ -268,12 +294,12 @@ details.catatan li{margin:4px 0}
   }
   function unduhCsv() {
     var kol = ['id', 'luas_ha', 'resort', 'luar_kawasan', 'tgl_delineasi', 'file', 'lapis', 'fid', 'kejadian', 'sumber_waktu', 'terbakar_awal_wita', 'terbakar_akhir_wita',
-      'n_titik_di_bidang', 'n_titik_dekat', 'mulai_kejadian_wita', 'mutu', 'kejadian_bagian'];
+      'n_titik_di_bidang', 'n_titik_dekat', 'bulan_shp', 'tanggal_shp', 'cocok_shp', 'mulai_kejadian_wita', 'mutu', 'kejadian_bagian'];
     var q = function (v) { var t = v == null ? '' : String(v); return /[",\n;]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
     var baris = S.bidang.map(function (f) {
       var p = f.properties, w = (S.bw && S.bw[p.id]) || {};
       return [p.id, p.luas_ha, p.resort, p.luar_kawasan, p.tanggal, p.file, p.lapis, p.fid, w.kejadian, w.sumber, w.waktu_awal, w.waktu_akhir, w.n_titik, w.n_titik_dekat,
-        w.mulai, w.mutu, (w.bagian || []).map(function (x) { return x.kejadian + ' (' + (x.waktu_awal || '') + ' s.d. ' + (x.waktu_akhir || '') + ')'; }).join('; ')].map(q).join(',');
+        w.bulan_shp, w.tanggal_shp, w.cocok_shp, w.mulai, w.mutu, (w.bagian || []).map(function (x) { return x.kejadian + ' (' + (x.waktu_awal || '') + ' s.d. ' + (x.waktu_akhir || '') + ')'; }).join('; ')].map(q).join(',');
     });
     var blob = new Blob(['﻿' + kol.join(',') + '\n' + baris.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
@@ -292,8 +318,8 @@ details.catatan li{margin:4px 0}
     var gaya = function (f) {
       var p = f.properties;
       if (S.mode === 'bulan' && S.bw) {
-        var k = kelasBulan(p.id);
-        return { color: '#ffffff', weight: 0.8, opacity: 0.9, fillColor: k < 0 ? '#9e9e9e' : RAMP_BULAN[S.bulan[k].warna], fillOpacity: k < 0 ? 0.35 : 0.85, dashArray: k < 0 ? '3 3' : null };
+        var k = kelasBulan(p.id), b = bulanBidang(p.id), dariShp = !!(b && b.shp);
+        return { color: '#ffffff', weight: dariShp ? 1.4 : 0.8, opacity: 0.9, fillColor: k < 0 ? '#9e9e9e' : RAMP_BULAN[S.bulan[k].warna], fillOpacity: k < 0 ? 0.35 : 0.85, dashArray: k < 0 || dariShp ? '3 3' : null };
       }
       var baru = p.tanggal === d;
       return { color: baru ? '#ffe3d8' : WARNA_LAMA, weight: baru ? 1.4 : 0.8, fillColor: baru ? WARNA_BARU : WARNA_LAMA, fillOpacity: baru ? 0.55 : 0.38, dashArray: p.luar_kawasan ? '4 3' : null };

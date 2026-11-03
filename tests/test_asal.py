@@ -339,3 +339,62 @@ def test_tiba_bidang_dari_simulasi():
     assert bt["B001"]["tengah"] == "2026-08-10T10:57"
     ctx.satuan = None
     assert A.tiba_bidang(ctx, tiba, lab > 0, (0, 10, 0, 40, 1), j0) is None
+
+
+@pytest.mark.parametrize("asli,bulan,tanggal", [
+    ({"Bulan": "Agustus", "Tahun": "2026"}, "2026-08", None),
+    ({"BULAN": "8"}, "2026-08", None),
+    ({"bulan": "Sept."}, "2026-09", None),
+    ({"Tanggal": "27", "Bulan": "Juni", "Tahun": 2026}, "2026-06", "2026-06-27"),
+    ({"tgl": "2026-07-05"}, "2026-07", "2026-07-05"),
+    ({"Tanggal": "05/09/2026"}, "2026-09", "2026-09-05"),
+    ({"Bulan": "", "Tahun": "2026"}, None, None),
+    ({"X": 0.0}, None, None),
+])
+def test_waktu_shp(asli, bulan, tanggal):
+    w = A.waktu_shp(asli, 2026)
+    assert (w["bulan"] if w else None) == bulan and (w["tanggal"] if w else None) == tanggal
+    if w and tanggal:
+        assert (w["akhir"] - w["awal"]).days == 11             # +-5 hari dari tanggal tercatat
+
+
+def test_bidang_mengikuti_bulan_di_shp(tmp_path):
+    """Bila SHP mencatat bulan terbakar, kejadian pada bulan itu yang memiliki bidang walaupun kejadian lain lebih
+    banyak titiknya di dalam bidang; bila tidak ada kejadian pada bulan itu, aturan titik panas biasa dan ditandai beda."""
+    import json
+    cfg = {"aoi": {"epsg": 32750, "west": 600000, "north": 9090000, "east": 609000, "south": 9087000}}
+    g = A.Grid(cfg, 30.0)
+    kotak = [((600600, 9088200, 601800, 9089400), {"Bulan": "Juni", "Tahun": "2026"}),
+             ((601800, 9088200, 603000, 9089400), {"Bulan": "Agustus"})]
+    fc = dict(type="FeatureCollection", features=[
+        dict(type="Feature", properties=dict(id=f"B{i:03d}", luas_ha=144.0, tanggal="2026-10-30", asli=a),
+             geometry=dict(type="Polygon", coordinates=[_kotak_ll(g, *k)])) for i, (k, a) in enumerate(kotak, 1)])
+    pb = tmp_path / "bidang.geojson"
+    pb.write_text(json.dumps(fc))
+    tn = np.ones(g.shape, bool)
+    burn, info_b, satuan = A.areal_terbakar(g, None, tn, None, bidang=str(pb), log=lambda *a: None)
+    assert info_b["bidang_bulan_shp"] == 2 and satuan["shp"][1]["bulan"] == "2026-08"
+    titik = [((601200, 9088800), "2026-06-15T13:00"),                                          # Juni, 1 titik
+             ((601000, 9088600), "2026-07-20T13:00"), ((601300, 9089000), "2026-07-20T13:00"),
+             ((601400, 9088700), "2026-07-20T13:00"),                                          # Juli, 3 titik
+             ((602400, 9088800), "2026-10-05T13:10")]                                          # B002: hanya Oktober
+
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.g, ctx.tn, ctx.burn, ctx.satuan, ctx.lapis = g, tn, burn, satuan, {}
+    ctx.xy = np.array([p for p, _ in titik], float)
+    ctx.hs = [dict(t=dt.datetime.fromisoformat(s), conf="H", sensor="NOAA20", lat=-8.2, lon=118.0) for _, s in titik]
+    ctx.jam = np.array([A.jam_sejak_2000(p["t"]) for p in ctx.hs])
+    ctx.ll = lambda x, y: (-8.2, 118.0)
+    evs, info = A.siapkan(ctx, min_ha=1.0, log=lambda *a: None)
+    per = {ev["id"]: ev for ev in evs}
+    assert per["K20260615-1300"]["bidang"] == ["B001"] and per["K20260615-1300"]["luas_ha"] == pytest.approx(144.0)
+    assert per["K20260720-1300"]["bidang"] == [] and per["K20260720-1300"]["luas_ha"] == 0
+    assert per["K20261005-1310"]["bidang"] == ["B002"]
+    assert info["bidang_cocok_shp"] == 1 and info["bidang_beda_shp"] == 1
+    wb = A.waktu_bidang(ctx, evs, {}, [])
+    a, b = wb["B001"], wb["B002"]
+    assert a["kejadian"] == "K20260615-1300" and a["cocok_shp"] is True and a["bulan_shp"] == "2026-06"
+    assert a["waktu_awal"] == "2026-06-15T13:00" and a["titik_kejadian_lain"][0]["kejadian"] == "K20260720-1300"
+    assert b["kejadian"] == "K20261005-1310" and b["cocok_shp"] is False and b["bulan_shp"] == "2026-08"

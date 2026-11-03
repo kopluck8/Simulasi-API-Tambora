@@ -332,11 +332,80 @@ def raster_poligon(path, grid):
     return rasterize([(g, 1) for g in geoms], out_shape=grid.shape, transform=grid.transform).astype(bool)
 
 
+NAMA_BULAN = {"jan": 1, "januari": 1, "january": 1, "feb": 2, "februari": 2, "pebruari": 2, "february": 2, "mar": 3,
+              "maret": 3, "march": 3, "apr": 4, "april": 4, "mei": 5, "may": 5, "jun": 6, "juni": 6, "june": 6, "jul": 7,
+              "juli": 7, "july": 7, "agu": 8, "ags": 8, "agt": 8, "agus": 8, "agustus": 8, "aug": 8, "august": 8,
+              "sep": 9, "sept": 9, "september": 9, "okt": 10, "oktober": 10, "oct": 10, "october": 10, "nov": 11,
+              "nop": 11, "november": 11, "nopember": 11, "des": 12, "desember": 12, "dec": 12, "december": 12}
+
+
+def jam_sejak_2000(t: dt.datetime) -> float:
+    return (t - dt.datetime(2000, 1, 1)).total_seconds() / 3600.0
+
+
+def waktu_shp(asli, tahun_default=None, tol_bulan_hari=3, tol_tanggal_hari=5):
+    """Bulan/tanggal terbakar yang dicatat di atribut SHP delineasi (kolom Bulan, Tanggal, Tahun; tidak peka huruf
+    besar; Bulan boleh nama Indonesia/Inggris atau angka, Tanggal boleh nomor hari atau tanggal lengkap).
+    Mengembalikan dict(bulan 'YYYY-MM', tanggal 'YYYY-MM-DD'|None, awal, akhir) = jendela waktu dengan toleransi,
+    atau None bila bulan tidak tercatat."""
+    a = {str(k).strip().lower(): v for k, v in (asli or {}).items()}
+
+    def nilai(*nama):
+        for n in nama:
+            v = a.get(n)
+            if v is None:
+                continue
+            t = str(v).strip()
+            if t and t.lower() not in ("none", "null", "nan", "-", "0", "0.0"):
+                return t
+        return None
+
+    def bulat(t, lo, hi):
+        try:
+            v = int(float(t))
+        except (TypeError, ValueError):
+            return None
+        return v if lo <= v <= hi else None
+
+    th = bulat(nilai("tahun", "thn", "year"), 1990, 2100) or tahun_default
+    b, hari = None, None
+    bl = nilai("bulan", "bln", "month")
+    if bl:
+        k = bl.lower().strip(" .")
+        b = NAMA_BULAN.get(k) or NAMA_BULAN.get(k[:3]) or bulat(bl, 1, 12)
+    tg = nilai("tanggal", "tgl", "tanggal_kejadian", "tgl_kejadian", "date")
+    if tg:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d.%m.%Y", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+            try:
+                d = dt.datetime.strptime(tg[:19], fmt)
+                th, b, hari = d.year, d.month, d.day
+                break
+            except ValueError:
+                continue
+        else:
+            hari = bulat(tg, 1, 31)
+    if not (th and b):
+        return None
+    if hari:
+        try:
+            d0 = dt.datetime(int(th), b, hari)
+        except ValueError:
+            d0 = None
+        if d0 is not None:
+            return dict(bulan=f"{int(th):04d}-{b:02d}", tanggal=d0.date().isoformat(),
+                        awal=d0 - dt.timedelta(days=tol_tanggal_hari), akhir=d0 + dt.timedelta(days=tol_tanggal_hari + 1))
+    awal = dt.datetime(int(th), b, 1)
+    akhir = dt.datetime(int(th) + (b == 12), b % 12 + 1, 1)
+    return dict(bulan=f"{int(th):04d}-{b:02d}", tanggal=None, awal=awal - dt.timedelta(days=tol_bulan_hari),
+                akhir=akhir + dt.timedelta(days=tol_bulan_hari))
+
+
 def areal_terbakar(grid, delineasi, tn_mask=None, s2_tif=None, bidang=None, log=print):
     """Maska terbakar dan satuan areal. Satuan = bidang delineasi apa adanya bila file bidang ada (bidang yang
     bersebelahan tetap terpisah karena bisa terbakar pada bulan berbeda), lalu komponen terhubung sisanya
     (delineasi tanpa file bidang, bekas terbakar Sentinel-2 di luar kawasan TN).
-    Mengembalikan (maska, info, satuan) dengan satuan = dict(lab, n_bidang, n, props, geom (UTM))."""
+    Mengembalikan (maska, info, satuan) dengan satuan = dict(lab, n_bidang, n, props, geom (UTM), shp (waktu terbakar
+    yang dicatat di atribut SHP per bidang, lihat waktu_shp), jendela (jam sejak 2000 untuk bagi_areal))."""
     from rasterio.features import rasterize
     from scipy import ndimage
     lab = np.zeros(grid.shape, np.int32)
@@ -371,7 +440,11 @@ def areal_terbakar(grid, delineasi, tn_mask=None, s2_tif=None, bidang=None, log=
     lab = np.where(kl > 0, kl + nb, lab).astype(np.int32)
     log(f"areal terbakar: delineasi {info['delineasi_ha']} ha" + (f" ({nb} bidang)" if nb else "") +
         (f", + Sentinel-2 di luar TN {info['s2_luar_tn_ha']} ha" if "s2_luar_tn_ha" in info else ""))
-    return m, info, dict(lab=lab, n_bidang=nb, n=nb + int(nk), props=props, geom=geom)
+    shp = [waktu_shp(p.get("asli"), int(str(p.get("tanggal") or "0")[:4]) or None) for p in props]
+    jendela = [(jam_sejak_2000(w["awal"]), jam_sejak_2000(w["akhir"])) if w else None for w in shp]
+    if nb:
+        info["bidang_bulan_shp"] = sum(1 for w in shp if w)
+    return m, info, dict(lab=lab, n_bidang=nb, n=nb + int(nk), props=props, geom=geom, shp=shp, jendela=jendela)
 
 
 # =============================================================== kejadian
@@ -420,7 +493,23 @@ def kelompokkan(xy, jam, burn=None, grid=None, jarak_m=1500.0, jeda_jam=36.0, v_
 DALAM_KUAT_M = 200.0     # titik panas sejauh ini dari tepi bidang dianggap benar-benar api di bidang itu
 
 
-def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=None):
+def rentang_kejadian(hs_ev, hs_jam):
+    """{kejadian: (jam pertama, jam terakhir)} dari titik panasnya."""
+    out = {}
+    for e, j in zip(np.asarray(hs_ev).tolist(), np.asarray(hs_jam, float).tolist()):
+        lo, hi = out.get(e, (j, j))
+        out[e] = (min(lo, j), max(hi, j))
+    return out
+
+
+def sesuai_shp(rentang, jendela):
+    """Kejadian yang rentang waktunya bersinggungan dengan jendela waktu terbakar di atribut SHP bidang."""
+    if jendela is None:
+        return None
+    return {e for e, (lo, hi) in rentang.items() if lo <= jendela[1] and hi >= jendela[0]}
+
+
+def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=None, hs_jam=None):
     """Bagi sel terbakar ke kejadian. Satu satuan areal hanya dibagi ke kejadian yang titik panasnya <= radius_m
     dari satuan itu. Satuan = bidang delineasi (satuan["lab"] 1..n_bidang) atau komponen terhubung.
     - Bidang: pada dasarnya utuh untuk satu kejadian. Bobot titik panas: di dalam bidang 0,2-1 menurut jarak ke
@@ -430,6 +519,8 @@ def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=N
       sama sekali (bukan limpahan dari bidang sebelah) tetapi bobot titiknya di dalam bidang >= 1 ikut menjadi
       pemilik. Bidang dengan >= 2 pemilik (terbakar dua kali / memuat dua api) dibagi ke titik panas terdekat
       dari para pemiliknya.
+      Bila atribut SHP bidang mencatat bulan/tanggal terbakar (satuan["jendela"], perlu hs_jam) dan ada kejadian di
+      sekitar bidang pada waktu itu, hanya kejadian itu yang boleh memiliki bidang; bila tidak ada, aturan di atas.
     - Komponen lain (mis. bekas terbakar Sentinel-2): sel ke titik panas terdekat (<= maks_m).
     Mengembalikan raster kejadian (-1 = tanpa titik panas), label satuan, dan jumlah satuan."""
     from scipy import ndimage
@@ -456,6 +547,8 @@ def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=N
         for l in np.unique(sub[dk & (sub > 0)]):
             kand.setdefault(int(l), []).append(i)
     obj = ndimage.find_objects(lab)
+    jendela = (satuan or {}).get("jendela") if hs_jam is not None else None
+    rentang = rentang_kejadian(hs_ev, hs_jam) if jendela else {}
 
     def isi(sl, m, idx, es):
         sub = ev[sl]
@@ -489,6 +582,11 @@ def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=N
                 else:
                     w = 0.1
                 skor[e_i] = skor.get(e_i, 0.0) + w
+            ok = sesuai_shp({e: rentang[e] for e in skor}, jendela[l - 1]) if jendela and l - 1 < len(jendela) else None
+            if ok:      # waktu terbakar tercatat di SHP: hanya kejadian pada waktu itu
+                skor = {e: v for e, v in skor.items() if e in ok}
+                kuat = {e: v for e, v in kuat.items() if e in ok}
+                w_dalam = {e: v for e, v in w_dalam.items() if e in ok}
             kk = sorted(e for e, v in kuat.items() if v >= 1.0 - 1e-9)
             bid[l] = (sl, m, idx, kk or [min(skor, key=lambda e: (-round(skor[e], 6), e))], w_dalam)
             continue
@@ -1573,6 +1671,8 @@ def _info_bidang(ctx, satuan, ras, comp, ip, lab, radius_m=450.0):
     obj = ndimage.find_objects(comp, max_label=nb)
     ip = np.asarray(ip, int)
     pts = shapely.points(ctx.xy[ip, 0], ctx.xy[ip, 1]) if ip.size else None
+    rentang = rentang_kejadian(lab, ctx.jam[ip]) if ip.size else {}
+    jendela = satuan.get("jendela") or [None] * nb
     out = []
     for l in range(1, nb + 1):
         gb, pr = satuan["geom"][l - 1], satuan["props"][l - 1]
@@ -1598,8 +1698,15 @@ def _info_bidang(ctx, satuan, ras, comp, ip, lab, radius_m=450.0):
                 skor[int(lab[j])] = skor.get(int(lab[j]), 0.0) + 0.2 + 0.8 * min(1.0, float(dd) / 375.0)
             for j in dk:
                 skor[int(lab[j])] = skor.get(int(lab[j]), 0.0) + 0.1
+            ok = sesuai_shp({k: rentang[k] for k in skor}, jendela[l - 1])
+            if ok:
+                skor = {k: v for k, v in skor.items() if k in ok}
             e = min(skor, key=lambda k: (-round(skor[k], 6), k))
+        cocok = None
+        if jendela[l - 1] is not None and e >= 0:
+            cocok = {k: bool(sesuai_shp({k: rentang[k]}, jendela[l - 1])) for k in (bagian or {e: 0}) if k >= 0}
         out.append(dict(l=l, id=str(pr.get("id") or f"B{l:03d}"), props=pr, sel=sel, e=e, bagian=bagian or {e: 0},
+                        shp=(satuan.get("shp") or [None] * nb)[l - 1], cocok=cocok,
                         di=[int(ip[j]) for j in di], dekat=[int(ip[j]) for j in dk],
                         di_ev=[int(ip[j]) for j in di if int(lab[j]) == e]))
     return out
@@ -1624,7 +1731,7 @@ def siapkan(ctx, min_ha=1.0, zona_m=None, log=print):
     ev_hs = np.full(len(ctx.hs), -1)
     ev_hs[ip] = lab
     satuan = getattr(ctx, "satuan", None)
-    ras, comp, ncomp = bagi_areal(g, ctx.burn, ctx.xy[ip], lab, satuan=satuan)
+    ras, comp, ncomp = bagi_areal(g, ctx.burn, ctx.xy[ip], lab, satuan=satuan, hs_jam=ctx.jam[ip])
     ha = g.res ** 2 / 1e4
     luas = np.bincount(ras[ras >= 0].ravel(), minlength=lab.max() + 1 if len(lab) else 0) * ha
     evs = []
@@ -1693,7 +1800,10 @@ def siapkan(ctx, min_ha=1.0, zona_m=None, log=print):
     if ctx.bidang:
         info.update(bidang=len(ctx.bidang), bidang_titik_di_dalam=sum(1 for b in ctx.bidang if b["di_ev"]),
                     bidang_titik_dekat=sum(1 for b in ctx.bidang if b["e"] >= 0 and not b["di_ev"]),
-                    bidang_tanpa_titik=sum(1 for b in ctx.bidang if b["e"] < 0))
+                    bidang_tanpa_titik=sum(1 for b in ctx.bidang if b["e"] < 0),
+                    bidang_bulan_shp=sum(1 for b in ctx.bidang if b["shp"]),
+                    bidang_cocok_shp=sum(1 for b in ctx.bidang if b["cocok"] and b["cocok"].get(b["e"])),
+                    bidang_beda_shp=sum(1 for b in ctx.bidang if b["cocok"] and not b["cocok"].get(b["e"])))
     if zona is not None:
         info.update(zona_luar_tn_m=float(zona_m), titik_zona=int((pakai & zh).sum()), kejadian_zona=n_zona,
                     kejadian_luar_zona=len(evs) - n_zona,
@@ -1881,6 +1991,8 @@ def waktu_bidang(ctx, evs, hasil, baris):
         di = urut(i for i in b["di"] if eid and ctx.hs[i].get("ev") == eid)
         dk = urut(i for i in b["dekat"] if eid and ctx.hs[i].get("ev") == eid)
         d = dict(kejadian=eid, n_titik=len(di), n_titik_dekat=len(dk))
+        if b.get("cocok") and e in b["cocok"]:
+            d["cocok_shp"] = b["cocok"][e]
         if sel:
             d["luas_bagian_ha"] = round(sel * ha, 1)
         if di or dk:
@@ -1913,6 +2025,10 @@ def waktu_bidang(ctx, evs, hasil, baris):
         d = dict(bag[0])
         d.pop("luas_bagian_ha", None)
         d = dict(luas_ha=p.get("luas_ha"), resort=p.get("resort"), luar_kawasan=p.get("luar_kawasan"), **d)
+        if b.get("shp"):
+            d["bulan_shp"] = b["shp"]["bulan"]
+            if b["shp"].get("tanggal"):
+                d["tanggal_shp"] = b["shp"]["tanggal"]
         if len(bag) > 1:
             bag.sort(key=lambda x: x.get("waktu_awal") or "9999")
             wa = [x["waktu_awal"] for x in bag if x.get("waktu_awal")]
