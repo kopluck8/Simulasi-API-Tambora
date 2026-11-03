@@ -12,7 +12,11 @@ latitude = -8
 [kalibrasi]
 fmd = "kalibrasi/tambora_savana_cepat20.fmd"   # savana K1-K4 hasil kalibrasi (fmd20)
 fms = "kalibrasi/tambora_latihan.fms"
-ros_adjust = {}                                # contoh: { 30 = 1.0, 31 = 1.0 }
+# Koreksi laju api per kode fuel (ROS x faktor). Dari pemodelan terbalik 2 Nov 2026 (33 kejadian
+# yang terlihat >= 2 lintasan satelit), diterapkan atas persetujuan Deo 3 Nov 2026 (WITA).
+# K1 (30) tetap 1 karena datanya kurang. Hutan TU1 (161) x3,13 dari kelas "lain" (78% TU1).
+# Nilai yang sama untuk FlamMap desktop: kalibrasi/tambora_ros_adjust.adj (ROS Adjust File).
+ros_adjust = { 31 = 0.77, 32 = 0.69, 33 = 1.33, 161 = 3.13 }
 
 [drive]
 # ID folder induk di Google Drive (bagian terakhir URL folder). Bisa juga diisi lewat secret GDRIVE_FOLDER_ID.
@@ -68,6 +72,8 @@ model_cuaca = "best_match"
 [kawasan]
 resort = "docs/data/batas_resort.geojson"   # statistik sisa K1-K4 per resort di dashboard (poligon WGS84)
 tn = "docs/data/batas_tn.geojson"           # batas kawasan untuk luas areal terbakar di dalam kawasan
+zona_luar_tn_m = 1500                        # pemodelan terbalik: kejadian di luar TN hanya dihitung bila titik panas atau
+                                             # areal terbakarnya <= 1,5 km dari batas TN (permintaan Deo, 3 Nov 2026)
 
 [delineasi]
 # Delineasi manual areal terbakar di folder Drive 'delineasi' -> docs/status/areal_terbakar.json dan peta_terbakar.html

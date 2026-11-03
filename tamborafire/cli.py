@@ -579,7 +579,7 @@ def cmd_areal_terbakar(args, cfg):
         drive = Drive()
         fid = drive.path(cfg["drive"].get("delineasi", "delineasi"), cfg["drive"]["folder_id"])
         files = D.daftar_drive(drive, fid)
-        sidik = D.sidik(files, f"{mmdd}|{mode}|{luas_min}")
+        sidik = D.sidik(files, f"{mmdd}|{mode}|{luas_min}|bidang")   # '|bidang': keluaran per bidang (Nov 2026)
         print(f"folder delineasi: {len(files)} file, sidik {sidik}")
         if sidik == lama.get("sidik") and not args.paksa:
             print("Tidak ada perubahan di folder delineasi.")
@@ -589,12 +589,16 @@ def cmd_areal_terbakar(args, cfg):
         sets = D.unduh_drive(drive, files, kerja)
     hasil, gj = D.olah(sets, _rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), _rel(cfg["kawasan"]["resort"]),
                        mmdd, mode, luas_min)
-    hasil.update(sidik=sidik, diperbarui=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat())
+    gb = D.bidang(sets, _rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), _rel(cfg["kawasan"]["resort"]), mmdd, mode)
+    hasil.update(sidik=sidik, diperbarui=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+                 bidang=len(gb["features"]), bidang_file=os.path.relpath(_rel(args.bidang), ROOT))
     D.tulis(hasil, gj, args.status, args.geojson)
+    with open(args.bidang, "w", encoding="utf-8") as f:
+        json.dump(gb, f, ensure_ascii=False, separators=(",", ":"))
     for p in hasil["peringatan"]:
         print("peringatan:", p)
     print(f"{hasil['jumlah_delineasi']} tanggal delineasi, terbakar di kawasan {hasil['terbakar_ha']} ha "
-          f"(terakhir {hasil['tanggal']}), {len(gj['features'])} poligon -> {args.status}, {args.geojson}")
+          f"(terakhir {hasil['tanggal']}), {len(gj['features'])} poligon, {len(gb['features'])} bidang -> {args.status}, {args.geojson}, {args.bidang}")
 
 
 def _token_repo():
@@ -720,7 +724,8 @@ def cmd_asal_api(args, cfg):
         ls10 = L.to_landscape(lay, tr, crs.to_wkt(), cfg, "Tambora dasar")
     grid = A.Grid(cfg, 3 * ls10.res)
     tn = A.raster_poligon(_rel(cfg["kawasan"].get("tn", "docs/data/batas_tn.geojson")), grid)
-    burn, binfo = A.areal_terbakar(grid, _rel(args.delineasi), tn, args.bekas_s2)
+    bidang = _rel(args.bidang_areal) if args.bidang_areal else None
+    burn, binfo, satuan = A.areal_terbakar(grid, _rel(args.delineasi), tn, args.bekas_s2, bidang=bidang)
     t_min = min(p["t"] for p in pts).date() - dt.timedelta(days=6)
     t_max = min(max(p["t"] for p in pts).date() + dt.timedelta(days=2), dt.date.today())
     cuaca = A.CuacaUji() if args.cuaca_uji else A.Cuaca(os.path.join(args.kerja, "cuaca"), t_min, t_max,
@@ -728,7 +733,9 @@ def cmd_asal_api(args, cfg):
     fmd, fms = _rel(cfg["kalibrasi"]["fmd"]), _rel(cfg["kalibrasi"]["fms"])
     ra = {int(k): float(v) for k, v in cfg["kalibrasi"].get("ros_adjust", {}).items()}
     ctx = A.Konteks(cfg, ls10, fmd, fms, ra, pts, lin, burn, tn, cuaca, root=ROOT)
-    evs, info = A.siapkan(ctx, min_ha=args.min_ha)
+    ctx.satuan = satuan
+    zona = args.zona_luar_tn if args.zona_luar_tn is not None else cfg["kawasan"].get("zona_luar_tn_m")
+    evs, info = A.siapkan(ctx, min_ha=args.min_ha, zona_m=None if zona is None or zona < 0 else zona)
     lama = {} if args.ulang else A.hasil_lama(args.status, args.keluaran)
     hanya = set(args.hanya.split(",")) if args.hanya else None
     hasil, gagal = A.jalankan(ctx, evs, lama, proses=args.proses, hanya=hanya)
@@ -737,6 +744,7 @@ def cmd_asal_api(args, cfg):
                               rentang_wita=[min(p["t"] for p in pts).strftime("%Y-%m-%d %H:%M"),
                                             max(p["t"] for p in pts).strftime("%Y-%m-%d %H:%M")]),
              areal_terbakar=dict(binfo, file=os.path.relpath(_rel(args.delineasi), ROOT),
+                                 file_bidang=os.path.relpath(bidang, ROOT) if bidang and os.path.exists(bidang) else None,
                                  s2=os.path.basename(args.bekas_s2) if args.bekas_s2 else None),
              cuaca="uji (buatan)" if args.cuaca_uji else "Open-Meteo ERA5 / ERA5-Land (arsip), prakiraan untuk 6 hari terakhir",
              landscape=os.path.basename(args.lcp) if args.lcp else "GeoTIFF dasar awal kemarau (Drive/dasar)",
@@ -849,6 +857,7 @@ def main(argv=None):
     q = sp.add_parser("areal-terbakar", help="rekap + GeoJSON areal terbakar dari SHP delineasi manual di Drive")
     q.add_argument("--status", default="docs/status/areal_terbakar.json")
     q.add_argument("--geojson", default="docs/data/areal_terbakar.geojson")
+    q.add_argument("--bidang", default="docs/data/areal_terbakar_bidang.geojson", help="bidang delineasi apa adanya (tidak digabung)")
     q.add_argument("--kerja", default="kerja")
     q.add_argument("--lokal", help="uji: baca folder lokal, bukan Drive")
     q.add_argument("--paksa", action="store_true", help="olah ulang walau isi folder Drive tidak berubah")
@@ -875,12 +884,16 @@ def main(argv=None):
     q.add_argument("--dasar", default="kerja/dasar", help="folder GeoTIFF dasar (landscape awal musim)")
     q.add_argument("--lcp", help="atau landscape .lcp 10 m awal musim (tanpa bekas terbakar)")
     q.add_argument("--delineasi", default="docs/data/areal_terbakar.geojson")
+    q.add_argument("--bidang-areal", default="docs/data/areal_terbakar_bidang.geojson",
+                   help="bidang delineasi apa adanya (dari `tambora areal-terbakar`); kosong = pakai delineasi gabungan")
     q.add_argument("--bekas-s2", help="bekas_terbakar_musim.tif (Sentinel-2) untuk areal di luar kawasan TN")
     q.add_argument("--status", default="docs/status/asal_api.json")
     q.add_argument("--keluaran", default="docs/data/asal_api")
     q.add_argument("--kerja", default="kerja/asal")
     q.add_argument("--proses", type=int, default=max(1, min(4, os.cpu_count() or 1)))
     q.add_argument("--min-ha", type=float, default=1.0, help="luas areal terbakar minimal per kejadian")
+    q.add_argument("--zona-luar-tn", type=float, help="kejadian di luar TN hanya dihitung bila <= meter ini dari batas TN "
+                   "(bawaan: [kawasan] zona_luar_tn_m; -1 = tanpa batas)")
     q.add_argument("--hanya", help="id kejadian dipisah koma (lainnya diambil dari hasil lama)")
     q.add_argument("--ulang", action="store_true", help="hitung ulang semua kejadian (abaikan cache)")
     q.add_argument("--tanpa-firms", action="store_true", help="jangan tambah titik panas dari FIRMS")

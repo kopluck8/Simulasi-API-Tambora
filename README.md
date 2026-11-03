@@ -122,7 +122,9 @@ NDVI/NBR dihitung dari DN mentah (termasuk offset +1000), sama dengan file latih
 Delineasi manual (misalnya tiap 5 hari) cukup diunggah sebagai zip SHP ke folder Drive `delineasi`, dengan tanggal di nama file
 (`delineasi_2026-10-30.zip`). Workflow `Areal terbakar (delineasi manual)` memeriksa folder itu setiap jam, menggabungkan semua
 delineasi sejak awal musim (tumpang tindih tidak dihitung dua kali), menghitung luas per resort di UTM 50S, lalu menulis
-`docs/status/areal_terbakar.json` dan `docs/data/areal_terbakar.geojson`. Hasilnya tampil di
+`docs/status/areal_terbakar.json` dan `docs/data/areal_terbakar.geojson` (gabungan per tanggal dan resort, untuk rekap luas),
+serta `docs/data/areal_terbakar_bidang.geojson`: **bidang delineasi apa adanya**, tidak digabung, luas sesuai SHP, dengan FID
+rekaman asli (bidang yang dikirim ulang di file lebih baru dikenali dari IoU ≥ 0,9). Hasilnya tampil di
 [peta areal terbakar](https://kopluck8.github.io/Simulasi-API-Tambora/peta_terbakar.html) dan di dashboard Satu Data Tambora.
 Panduan: [docs/PANDUAN_DELINEASI.md](docs/PANDUAN_DELINEASI.md). Uji tanpa Drive: `tambora areal-terbakar --lokal folder_shp`.
 
@@ -149,12 +151,15 @@ Tab **Asal Api** menampilkan, untuk tiap kejadian kebakaran musim ini: titik asa
 Cara hitung (`tamborafire/asal.py`, perintah `tambora asal-api`):
 
 1. **Titik panas** VIIRS/MODIS disimpan di `data/titik_panas/titik_panas.geojson` (WITA). Impor KMZ/KML SiPongi atau CSV FIRMS dengan `tambora titik-panas FILE...`; workflow menambah data baru dari NASA FIRMS tiap hari (secret `FIRMS_MAP_KEY`).
-2. **Kejadian**: titik panas ≤ 1,5 km dan ≤ 36 jam, atau tersambung oleh areal terbakar, digabung. Areal terbakar delineasi (`docs/data/areal_terbakar.geojson`) dibagi ke kejadian; areal kejadian sebelumnya menjadi fuel 99.
+2. **Kejadian**: titik panas ≤ 1,5 km dan ≤ 36 jam, atau tersambung oleh areal terbakar, digabung. Kejadian di luar kawasan hanya dihitung bila titik panas atau areal terbakarnya ≤ 1,5 km dari batas TN (`[kawasan] zona_luar_tn_m`); areal kejadian yang lolos tetap utuh. Areal terbakar = bidang delineasi (`docs/data/areal_terbakar_bidang.geojson`) + bekas terbakar Sentinel-2 di luar TN. Tiap bidang utuh milik kejadian yang titik panasnya ada di dalam bidang (bobot 0,2–1 menurut jarak ke tepi bidang, titik ≤ 400 m di luar 0,1); titik di tepi (< 200 m) dari kejadian yang punya bidang sendiri dianggap limpahan piksel dari bidang sebelah. Bidang yang memuat titik panas ≥ 2 kejadian jauh di dalamnya dibagi ke titik panas terdekat. Areal kejadian sebelumnya menjadi fuel 99.
 3. **Cuaca** ERA5/ERA5-Land per jam dari Open-Meteo di lokasi kejadian (dengan 3 hari pengkondisian kadar air), angin medan, fmd20 + fms + landscape dasar awal kemarau.
 4. **Inversi waktu tempuh**: simulasi mundur dari tiap titik panas memberi, untuk tiap sel, jam paling akhir api bisa mulai di sel itu agar sampai di piksel satelit pada jam deteksi. Kandidat terbaik disimulasikan maju (FARSITE, 7 faktor laju api k ×0,35–×2,83) dan dinilai dari kecocokan waktu (termasuk lintasan satelit tanpa deteksi sebelum deteksi pertama) dan bentuk areal (Sørensen).
-5. **Kalibrasi**: faktor k kejadian yang terlihat di ≥ 2 lintasan satelit digabung per kelas K1–K4 (regresi berbobot + bootstrap) → saran `ros_adjust`. Saran tidak diterapkan otomatis.
+5. **Kalibrasi**: faktor k kejadian yang terlihat di ≥ 2 lintasan satelit digabung per kelas K1–K4 (regresi berbobot + bootstrap) → saran `ros_adjust`. Saran tidak diterapkan otomatis. Saran pertama (2 Nov 2026) sudah diterapkan di `config/tambora.toml` atas persetujuan Deo: K2 ×0,77, K3 ×0,69, K4 ×1,33, hutan TU1 (161) ×3,13. Sejak itu faktor k dihitung terhadap simulasi yang sudah dikoreksi (×1 = koreksinya pas). Untuk FlamMap desktop, nilai yang sama ada di `kalibrasi/tambora_ros_adjust.adj` (FlamMap: ROS Adjust File).
 
-Hasil: `docs/status/asal_api.json` (ringkasan, jam rawan, kalibrasi, tabel kejadian), `docs/data/asal_api/` (`peta.geojson`, `k/<id>.json` detail, `wxs/<id>.wxs` cuaca, `titik_panas.geojson`).
+6. **Laju api** (m/menit): laju muka api tiap sel dari simulasi terbaik (1/|∇ waktu tiba|, seperti Spread Rate FARSITE) di dalam areal terbakar, per jam WITA; tab menampilkan rata-rata dan kepala api (persentil 90) per pagi, siang, sore, malam.
+7. **Waktu terbakar per bidang** (`docs/data/asal_api/bidang_waktu.json`): deteksi titik panas pertama sampai terakhir di dalam bidang (bila tidak ada: titik panas kejadiannya ≤ 400 m, lalu jam tiba api simulasi), ditambah jam tiba api simulasi di bidang (persentil 10/50/90). Jam **mulai** api tetap per kejadian dari langkah 4. Klik bidang di peta tab Asal Api atau peta areal terbakar; unduh GeoJSON/CSV dari tab Asal Api.
+
+Hasil: `docs/status/asal_api.json` (ringkasan, jam rawan, kalibrasi, tabel kejadian), `docs/data/asal_api/` (`peta.geojson`, `k/<id>.json` detail, `wxs/<id>.wxs` cuaca, `titik_panas.geojson`, `zona.geojson`, `bidang_waktu.json`).
 Workflow **Asal api** (`.github/workflows/asal-api.yml`) berjalan tiap hari 06:40 WITA dan setelah ada delineasi baru; kejadian yang datanya tidak berubah tidak dihitung ulang.
 Jalankan manual dari Actions dengan pilihan `ulang` (hitung semua), `hanya` (id kejadian), atau `firms_sejak` (tambah titik panas FIRMS sejak tanggal itu).
 

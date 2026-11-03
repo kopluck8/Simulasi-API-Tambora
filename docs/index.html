@@ -272,7 +272,7 @@
     <div class="kartu as-kepala">
       <div>
         <h2>Dari mana api datang dan pukul berapa api mulai</h2>
-        <p class="muted small">Pemodelan terbalik (inverse modelling): untuk tiap kejadian kebakaran musim ini, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE (fmd20, fms, landscape, angin per jam ERA5) yang dijalankan mundur dan maju. Hasilnya titik asal api, perkiraan jam api mulai, arah datang api, dan faktor koreksi laju api untuk kalibrasi fuel model. Hasil ini informasi, bukan simulasi baru, dan dihitung ulang otomatis setiap hari.</p>
+        <p class="muted small">Pemodelan terbalik (inverse modelling): untuk tiap kejadian kebakaran musim ini di kawasan TN dan sampai 1,5 km di luar batasnya, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE (fmd20, fms, landscape, angin per jam ERA5) yang dijalankan mundur dan maju. Hasilnya titik asal api, perkiraan jam api mulai, arah datang api, dan faktor koreksi laju api untuk kalibrasi fuel model. Hasil ini informasi, bukan simulasi baru, dan dihitung ulang otomatis setiap hari.</p>
       </div>
       <p class="as-info small" id="asInfo">Memuat hasil…</p>
     </div>
@@ -306,7 +306,9 @@
             <select id="asWarna"><option value="jam">Jam api mulai</option><option value="mutu">Mutu dugaan</option></select></div>
         </div>
         <div id="asPeta" aria-label="Peta titik asal api"></div>
-        <p class="petunjuk">Panah pada titik asal menunjuk arah api merambat (dari titik asal ke pusat areal terbakar). Klik titik asal untuk melihat zona peluang 50% dan 90%, garis waktu rambat per jam, dan titik panas kejadian itu.</p>
+        <p class="petunjuk">Panah pada titik asal menunjuk arah api merambat (dari titik asal ke pusat areal terbakar). Klik titik asal untuk melihat zona peluang 50% dan 90%, garis waktu rambat per jam, dan titik panas kejadian itu. Klik bidang areal terbakar untuk melihat waktu terbakarnya.</p>
+        <div class="as-unduh-bidang" id="asBidangUnduh" hidden><span class="small muted">Unduh bidang areal terbakar + waktu terbakarnya:</span>
+          <button class="garis kecil" id="asBidangGeo">GeoJSON</button><button class="garis kecil" id="asBidangCsv">CSV</button></div>
       </div>
       <div class="as-samping">
         <div class="kartu">
@@ -325,6 +327,15 @@
           <details><summary>Tabel per arah</summary><div class="tw" id="asMawarTabel"></div></details>
         </div>
       </div>
+    </div>
+
+    <div class="kartu" id="asLajuKartu">
+      <h2>Laju api menurut waktu</h2>
+      <p class="small" id="asLajuTeks"></p>
+      <div class="as-laju-ubin" id="asLajuUbin"></div>
+      <div class="as-legenda" id="asLajuLegenda"></div>
+      <div class="as-grafik" id="asLaju" role="img" aria-label="Laju api rata-rata per jam WITA"></div>
+      <details><summary>Tabel per jam</summary><div class="tw" id="asLajuTabel"></div></details>
     </div>
 
     <div class="kartu as-detail" id="asDetail" hidden tabindex="-1"></div>
@@ -400,10 +411,11 @@
       </ul>
       <h3>Asal Api (pemodelan terbalik)</h3>
       <ul>
-        <li>Untuk tiap kejadian kebakaran musim ini, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE yang dijalankan mundur dan maju (fmd20, fms, landscape, angin per jam ERA5). Hasilnya <b>titik asal</b> (zona peluang 50% dan 90%), <b>perkiraan jam api mulai</b> dengan selang 90%, <b>arah datang api</b>, tempat api masuk kawasan bila asalnya di luar TN, dan <b>faktor laju api k</b>.</li>
+        <li>Untuk tiap kejadian kebakaran musim ini di kawasan TN dan sampai 1,5 km di luar batasnya, titik panas satelit dan areal terbakar dicocokkan dengan simulasi FARSITE yang dijalankan mundur dan maju (fmd20, fms, landscape, angin per jam ERA5). Hasilnya <b>titik asal</b> (zona peluang 50% dan 90%), <b>perkiraan jam api mulai</b> dengan selang 90%, <b>arah datang api</b>, tempat api masuk kawasan bila asalnya di luar TN, <b>laju api</b> (m/menit) per pagi, siang, sore, malam, dan <b>faktor laju api k</b>.</li>
         <li>Grafik <b>jam rawan pembakaran</b> menjumlahkan perkiraan jam mulai semua kejadian per jam WITA, dibandingkan dengan jam deteksi satelit pertama (yang selalu jatuh di jam lintasan satelit, sekitar 01–03 dan 12–15).</li>
         <li>Saring menurut bulan, mutu dugaan, letak titik asal, resort, dan luas. Semua angka, peta, dan grafik mengikuti saringan. Tabel bisa diunduh CSV, titik asal dan zona sebagai GeoJSON.</li>
         <li>Klik titik asal atau baris tabel: zona peluang, garis waktu rambat per jam, titik panas kejadian itu (diwarnai menurut jam deteksi), grafik kapan api mulai, titik panas yang dipakai, dan cuaca per jam. Tombol <b>Simulasikan dari titik asal ini</b> mengisi tab Simulasi.</li>
+        <li>Areal terbakar memakai <b>bidang delineasi apa adanya</b> (tidak digabung, luas sesuai SHP). Klik sebuah bidang untuk melihat <b>waktu terbakarnya</b>: deteksi titik panas pertama sampai terakhir di dalam bidang itu (bila tidak ada, titik panas ≤ 400 m dari bidang). Jam <b>mulai</b> api tetap per kejadian dari pemodelan terbalik. Bidang bisa diunduh bersama waktunya (GeoJSON atau CSV, dengan FID rekaman SHP asli untuk digabung di ArcGIS).</li>
         <li><b>Mutu</b>: baik = terlihat di ≥ 2 lintasan satelit dan cocok; sedang = cukup cocok atau hanya 1 lintasan; rendah = kurang cocok. Faktor k kejadian yang baik dipakai untuk <b>saran kalibrasi</b> ros_adjust per kelas K1–K4 (tidak diterapkan otomatis).</li>
         <li>Hasil diperbarui otomatis tiap pagi dan setiap ada delineasi baru. Titik asal adalah zona peluang, bukan titik pasti.</li>
       </ul>
@@ -423,6 +435,7 @@
       <h3>Landscape dan bahan bakar</h3>
       <ul>
         <li>Fuel savana K1–K4 = model 30–33 terkalibrasi (fmd20). Hutan TL6/TU1, batuan dan bekas terbakar 99.</li>
+        <li>Koreksi laju api (ros_adjust) dari pemodelan terbalik, berlaku sejak 3 November 2026: K2 ×0,77, K3 ×0,69, K4 ×1,33, hutan TU1 ×3,13. Untuk FlamMap desktop, file yang sama: <code>kalibrasi/tambora_ros_adjust.adj</code>.</li>
         <li>Landscape 10 m diperbarui otomatis setiap ada citra Sentinel-2 baru. Bekas terbakar sejak 1 Juni ditandai dari penurunan NBR yang dekat titik panas FIRMS.</li>
       </ul>
       <h3>Tautan</h3>

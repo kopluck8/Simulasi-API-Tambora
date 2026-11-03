@@ -180,3 +180,162 @@ def test_rinci_lain_menamai_kode_fuel():
     assert r[0]["nama"] == "TU1" and r[0]["persen"] == pytest.approx(60.0)
     assert r[1]["nama"] == "pertanian NB3" and r[2]["nama"] == "TL6"
     assert A.rinci_lain(_Ctx(), evs, set()) == []
+
+
+def test_zona_luar_tn_1500_m():
+    """Kejadian di luar TN hanya dihitung bila titik panas atau areal terbakarnya <= 1,5 km dari batas TN."""
+    cfg = {"aoi": {"epsg": 32750, "west": 0, "north": 3000, "east": 9000, "south": 0}}
+    g = A.Grid(cfg, 30.0)                                   # 300 x 100 sel, TN = x < 3 km
+    tn = np.zeros(g.shape, bool)
+    tn[:, :100] = True
+    burn = np.zeros(g.shape, bool)
+    burn[45:55, 25:40] = True                               # A: di dalam TN
+    burn[10:20, 135:145] = True                             # B: 1,05-1,35 km di luar TN
+    burn[45:55, 140:240] = True                             # C: titik panas 4 km di luar, areal sampai 1,2 km
+    burn[45:55, 262:272] = True                             # D: 4,9 km di luar TN
+    t0 = dt.datetime(2026, 9, 1, 13)
+    xy = [(1000, 1500), (4200, 2535), (6500, 1500), (8000, 1500)]
+
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.g, ctx.tn, ctx.burn = g, tn, burn
+    ctx.xy = np.array(xy, float)
+    ctx.jam = np.array([0.0, 100.0, 200.0, 300.0])
+    ctx.hs = [dict(t=t0 + dt.timedelta(hours=float(j)), conf="H", sensor="NOAA20", lat=-8.2, lon=118.0) for j in ctx.jam]
+    ctx.ll = lambda x, y: (-8.2, 118.0)
+    evs, info = A.siapkan(ctx, min_ha=1.0, zona_m=1500, log=lambda *a: None)
+    assert [ev["zona"] for ev in evs] == [True, True, True, False]
+    assert [ev["layak"] for ev in evs] == [True, True, True, False]
+    assert info["kejadian_zona"] == 3 and info["kejadian_luar_zona"] == 1
+    assert [p["zona"] for p in ctx.hs] == [True, True, False, False]
+    assert evs[2]["luas_ha"] > 8                            # areal kejadian C tetap utuh (bagian > 1,5 km ikut)
+    evs2, info2 = A.siapkan(ctx, min_ha=1.0, zona_m=None, log=lambda *a: None)
+    assert all(ev["layak"] for ev in evs2) and "kejadian_zona" not in info2
+
+
+def test_laju_api_per_jam():
+    """Muka api ke timur 0,1 jam per sel 30 m = 30 m / 6 menit = 5 m/menit, dirangkum per jam WITA."""
+    tiba = np.full((20, 40), np.nan)
+    for c in range(40):
+        tiba[:, c] = 1.0 + 0.1 * c                     # jam tiba 1,0 - 4,9 (relatif j0)
+    areal = np.ones(tiba.shape, bool)
+    j0 = 24 * 100 + 10                                 # jam 10:00 WITA
+    r = A.laju_api(tiba, areal, 30.0, j0)
+    assert r["rata"] == pytest.approx(5.0, rel=1e-6) and r["kepala"] == pytest.approx(5.0, rel=1e-6)
+    assert [h[0] for h in r["jam"]] == [11, 12, 13, 14]
+    assert all(h[1] == pytest.approx(5.0) for h in r["jam"])
+    diag = np.add.outer(np.arange(20), np.arange(40)) * 0.1
+    r2 = A.laju_api(diag, areal, 30.0, 0)
+    assert r2["rata"] == pytest.approx(30.0 / (6.0 * math.sqrt(2)), abs=0.01)
+    datar = np.ones((10, 10))                          # tanpa gradien (sel menyala bersamaan) -> diabaikan
+    assert A.laju_api(datar, np.ones((10, 10), bool), 30.0, 0) is None
+
+
+def _kotak_ll(g, x0, y0, x1, y1):
+    xs, ys = [x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0]
+    lon, lat = g.ke_ll.transform(xs, ys)
+    return [[round(a, 8), round(b, 8)] for a, b in zip(lon, lat)]
+
+
+def test_bidang_bersebelahan_beda_bulan(tmp_path):
+    """Bidang delineasi tidak digabung: bidang A (Agustus) dan B (Oktober) bersinggungan, titik panas Oktober yang
+    'tumpah' ke tepi A tidak mengambil A. Waktu terbakar bidang dari titik panas di dalamnya."""
+    import json
+    cfg = {"aoi": {"epsg": 32750, "west": 600000, "north": 9090000, "east": 609000, "south": 9087000}}
+    g = A.Grid(cfg, 30.0)
+    kotak = [(600600, 9088200, 601800, 9089400),     # B001 = A, 144 ha
+             (601800, 9088200, 603000, 9089400),     # B002 = B, bersinggungan dengan A
+             (604000, 9088500, 604600, 9089100),     # B003 = C, titik panas hanya 200 m di luar
+             (607000, 9088500, 607600, 9089100),     # B004 = D, tanpa titik panas
+             (605510, 9088010, 605530, 9088030),     # B005 = E, 0,04 ha (lebih kecil dari sel 30 m)
+             (603200, 9087100, 605000, 9088100),     # B006 = F, 180 ha, dua api berbeda bulan di dalamnya
+             (605800, 9087100, 606800, 9088100)]     # B007 = G, api Juni + api Agustus di tepi timur (tanpa bidang lain)
+    fc = dict(type="FeatureCollection", features=[
+        dict(type="Feature", properties=dict(id=f"B{i:03d}", luas_ha=round((k[2] - k[0]) * (k[3] - k[1]) / 1e4, 2)),
+             geometry=dict(type="Polygon", coordinates=[_kotak_ll(g, *k)])) for i, k in enumerate(kotak, 1)])
+    pb = tmp_path / "bidang.geojson"
+    pb.write_text(json.dumps(fc))
+    tn = np.ones(g.shape, bool)
+    burn, info_b, satuan = A.areal_terbakar(g, None, tn, None, bidang=str(pb), log=lambda *a: None)
+    assert info_b["bidang"] == 7 and satuan["n_bidang"] == 7
+    assert (satuan["lab"] == 1).sum() == 1600 and (satuan["lab"] == 2).sum() == 1600 and not (satuan["lab"] == 5).any()
+    t = lambda s: dt.datetime.fromisoformat(s)
+    titik = [((601200, 9088800), "2026-08-10T13:00"), ((601000, 9088600), "2026-08-10T13:00"),
+             ((601300, 9089000), "2026-08-11T01:30"),                                    # A dalam (Agustus)
+             ((602400, 9088800), "2026-10-05T13:10"), ((602500, 9088700), "2026-10-05T13:10"),   # B dalam (Oktober)
+             ((601780, 9088800), "2026-10-05T13:10"), ((601790, 9088900), "2026-10-05T13:10"),
+             ((601760, 9088700), "2026-10-06T01:40"), ((601700, 9088800), "2026-10-06T01:40"),
+             ((601650, 9088600), "2026-10-06T01:40"), ((601690, 9089000), "2026-10-06T01:40"),   # Oktober tumpah ke tepi A
+             ((603600, 9087600), "2026-07-01T13:00"), ((603700, 9087500), "2026-07-01T13:00"),   # F barat (Juli)
+             ((604600, 9087600), "2026-09-20T13:30"), ((604500, 9087700), "2026-09-20T13:30"),   # F timur (September)
+             ((606300, 9087600), "2026-06-10T13:00"), ((606350, 9087550), "2026-06-10T13:00"),   # G tengah (Juni)
+             ((606750, 9087400), "2026-08-25T01:30"), ((606740, 9087600), "2026-08-25T01:30"),
+             ((606720, 9087800), "2026-08-25T01:30"), ((606700, 9087500), "2026-08-25T01:30"),   # G tepi timur (Agustus)
+             ((604800, 9088800), "2026-08-20T13:05"),                                    # dekat C
+             ((605520, 9088020), "2026-09-15T13:20")]                                    # di bidang kecil E
+
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.g, ctx.tn, ctx.burn, ctx.satuan, ctx.lapis = g, tn, burn, satuan, {}
+    ctx.xy = np.array([p for p, _ in titik], float)
+    ctx.hs = [dict(t=t(s), conf="H", sensor="NOAA20", lat=-8.2, lon=118.0) for _, s in titik]
+    ctx.jam = np.array([(p["t"] - dt.datetime(2000, 1, 1)).total_seconds() / 3600 for p in ctx.hs])
+    ctx.ll = lambda x, y: (-8.2, 118.0)
+    evs, info = A.siapkan(ctx, min_ha=1.0, log=lambda *a: None)
+    per = {ev["id"]: ev for ev in evs}
+    assert sorted(per) == ["K20260610-1300", "K20260701-1300", "K20260810-1300", "K20260820-1305", "K20260825-0130",
+                           "K20260915-1320", "K20260920-1330", "K20261005-1310"]
+    assert per["K20260810-1300"]["bidang"] == ["B001"] and per["K20261005-1310"]["bidang"] == ["B002"]
+    assert per["K20260820-1305"]["bidang"] == ["B003"] and per["K20260915-1320"]["bidang"] == ["B005"]
+    assert per["K20260810-1300"]["luas_ha"] == pytest.approx(144.0) and per["K20261005-1310"]["luas_ha"] == pytest.approx(144.0)
+    assert per["K20260701-1300"]["bidang"] == ["B006"] and per["K20260920-1330"]["bidang"] == ["B006"]
+    luas_f = (satuan["lab"] == 6).sum() * 0.09                        # luas F di grid 30 m
+    assert per["K20260701-1300"]["luas_ha"] + per["K20260920-1330"]["luas_ha"] == pytest.approx(luas_f)
+    assert 60 < per["K20260701-1300"]["luas_ha"] < 120                 # F dibagi: dua kejadian kuat
+    assert per["K20260610-1300"]["bidang"] == ["B007"] and per["K20260825-0130"]["bidang"] == ["B007"]
+    assert 0 < per["K20260825-0130"]["luas_ha"] < per["K20260610-1300"]["luas_ha"]   # api Agustus: bagian timur G
+    assert per["K20261005-1310"]["bidang"] == ["B002"]                 # limpahan Oktober di tepi A tidak mengambil A
+    assert info["bidang"] == 7 and info["bidang_titik_di_dalam"] == 5 and info["bidang_titik_dekat"] == 1
+    assert info["bidang_tanpa_titik"] == 1
+    wb = A.waktu_bidang(ctx, evs, {}, [])
+    a, b, c, d, e, f, g7 = (wb[f"B00{i}"] for i in range(1, 8))
+    assert a["kejadian"] == "K20260810-1300" and a["sumber"] == "titik panas di bidang" and a["n_titik"] == 3
+    assert (a["waktu_awal"], a["waktu_akhir"]) == ("2026-08-10T13:00", "2026-08-11T01:30")
+    assert a["titik_kejadian_lain"] == [dict(kejadian="K20261005-1310", n=6, awal="2026-10-05T13:10")]
+    assert "bagian" not in a and a["luas_ha"] == 144.0
+    assert b["kejadian"] == "K20261005-1310" and (b["waktu_awal"], b["n_titik"]) == ("2026-10-05T13:10", 2)
+    assert c["sumber"] == "titik panas dekat (≤ 400 m)" and c["waktu_awal"] == "2026-08-20T13:05" and c["n_titik"] == 0
+    assert d["sumber"] == "tanpa titik panas" and d["kejadian"] is None and "waktu_awal" not in d
+    assert e["kejadian"] == "K20260915-1320" and e["sumber"] == "titik panas di bidang"
+    assert f["sumber"] == "titik panas di bidang (2 kejadian)" and f["luas_ha"] == 180.0
+    assert [x["kejadian"] for x in f["bagian"]] == ["K20260701-1300", "K20260920-1330"]
+    assert (f["waktu_awal"], f["waktu_akhir"]) == ("2026-07-01T13:00", "2026-09-20T13:30")
+    assert sum(x["luas_bagian_ha"] for x in f["bagian"]) == pytest.approx(luas_f)
+    assert [x["kejadian"] for x in g7["bagian"]] == ["K20260610-1300", "K20260825-0130"] and g7["kejadian"] == "K20260610-1300"
+    # tanpa file bidang: komponen terhubung (A+B jadi satu) dibagi ke titik panas terdekat seperti sebelumnya
+    ctx.satuan = None
+    evs2, info2 = A.siapkan(ctx, min_ha=1.0, log=lambda *a: None)
+    assert all(ev["bidang"] == [] for ev in evs2) and "bidang" not in info2
+
+
+def test_tiba_bidang_dari_simulasi():
+    """Jam tiba api simulasi per bidang (p10/p50/p90 WITA) dan persen sel bidang yang tercapai."""
+    lab = np.zeros((10, 40), np.int32)
+    lab[:, :20], lab[:, 20:] = 1, 2
+
+    class _Ctx:
+        pass
+    ctx = _Ctx()
+    ctx.satuan = dict(lab=lab, n_bidang=2, props=[dict(id="B001"), dict(id="B002")])
+    ctx.jam_ke_waktu = lambda j: dt.datetime(2000, 1, 1) + dt.timedelta(hours=float(j))
+    tiba = np.tile(np.arange(40) * 0.1, (10, 1))
+    tiba[:, 30:] = np.nan                               # separuh B002 tidak tercapai simulasi
+    j0 = (dt.datetime(2026, 8, 10, 10) - dt.datetime(2000, 1, 1)).total_seconds() / 3600
+    bt = A.tiba_bidang(ctx, tiba, lab > 0, (0, 10, 0, 40, 1), j0)
+    assert bt["B001"]["tercapai"] == 100.0 and bt["B002"]["tercapai"] == 50.0
+    assert bt["B001"]["awal"] < bt["B001"]["tengah"] < bt["B001"]["akhir"] <= bt["B002"]["awal"]
+    assert bt["B001"]["tengah"] == "2026-08-10T10:57"
+    ctx.satuan = None
+    assert A.tiba_bidang(ctx, tiba, lab > 0, (0, 10, 0, 40, 1), j0) is None

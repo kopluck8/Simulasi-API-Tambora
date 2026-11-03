@@ -89,8 +89,19 @@ def _ubah(crs):
     return (lambda g: g) if c.to_epsg() == UTM else _ke_utm(c)
 
 
-def baca_file(path):
-    """Poligon (UTM 50S) dari .shp/.geojson/.zip. Kembalikan (list geometri, list peringatan)."""
+def _aman(v):
+    """Nilai atribut DBF/GeoJSON yang aman untuk JSON."""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, bytes):
+        return v.decode("utf-8", "ignore")
+    return str(v)
+
+
+def baca_file(path, atribut=False):
+    """Poligon (UTM 50S) dari .shp/.geojson/.zip. Kembalikan (list geometri, list peringatan).
+    atribut=True: list dict(g=geometri, atribut=atribut asli, fid=nomor rekaman asli (0 = rekaman pertama, sama
+    dengan FID di ArcGIS), lapis=nama file .shp/.geojson) per rekaman."""
     from shapely.geometry import shape
     pesan, geoms = [], []
     low = path.lower()
@@ -110,36 +121,42 @@ def baca_file(path):
         if not utama:
             return [], [f"{os.path.basename(path)}: tidak berisi .shp atau .geojson"]
         for f in utama:
-            g, p = baca_file(f)
+            g, p = baca_file(f, atribut)
             geoms += g
             pesan += [f"{os.path.basename(path)}/{x}" for x in p]
         return geoms, pesan
     if low.endswith((".geojson", ".json")):
         d = json.load(open(path, encoding="utf-8"))
         feats = d["features"] if "features" in d else [d]
-        raw = [shape(f["geometry"]) for f in feats if f.get("geometry")]
+        raw = [(shape(f["geometry"]), f.get("properties") or {}, i) for i, f in enumerate(feats) if f.get("geometry")]
         crs = (d.get("crs") or {}).get("properties", {}).get("name")
         if crs is None:
-            crs = UTM if raw and max(abs(c) for g in raw for c in g.bounds) > 360 else 4326
+            crs = UTM if raw and max(abs(c) for g, _, _ in raw for c in g.bounds) > 360 else 4326
         ubah = _ubah(crs)
     else:
         import shapefile
         r = shapefile.Reader(path)
-        raw = [shape(s.__geo_interface__) for s in r.shapes() if s.shapeType != shapefile.NULL]
+        nama = [f[0] for f in r.fields[1:]]
+        try:
+            raw = [(shape(sr.shape.__geo_interface__), dict(zip(nama, sr.record)), i)
+                   for i, sr in enumerate(r.iterShapeRecords()) if sr.shape.shapeType != shapefile.NULL]
+        except Exception:   # DBF rusak/tidak ada: geometri saja
+            raw = [(shape(x.__geo_interface__), {}, i) for i, x in enumerate(r.shapes()) if x.shapeType != shapefile.NULL]
         if r.shapeType not in (shapefile.POLYGON, shapefile.POLYGONZ, shapefile.POLYGONM):
             return [], [f"{os.path.basename(path)}: bukan poligon ({r.shapeTypeName}), dilewati"]
         prj = os.path.splitext(path)[0] + ".prj"
         if os.path.exists(prj):
             crs = open(prj, encoding="utf-8", errors="ignore").read()
         else:
-            derajat = bool(raw) and max(abs(c) for g in raw for c in g.bounds) <= 360
+            derajat = bool(raw) and max(abs(c) for g, _, _ in raw for c in g.bounds) <= 360
             crs = 4326 if derajat else UTM
             pesan.append(f"{os.path.basename(path)}: tanpa .prj, dianggap {'WGS84' if derajat else 'UTM 50S'}")
         ubah = _ubah(crs)
-    for g in raw:
+    for g, pr, i in raw:
         g = _poligon(ubah(g))
         if g is not None and not g.is_empty:
-            geoms.append(g)
+            geoms.append(dict(g=g, atribut={str(k): _aman(v) for k, v in pr.items()}, fid=i,
+                              lapis=os.path.basename(path)) if atribut else g)
     if raw and not geoms:
         pesan.append(f"{os.path.basename(path)}: tidak ada poligon yang terbaca")
     return geoms, pesan
@@ -324,6 +341,57 @@ def olah(sets, tn_path, resort_path, mmdd="06-01", mode="gabung", luas_min_ha=0.
             r["terbakar_ha"] = round(_ha(sebelum.intersection(rg)), 1)
     hasil["persen_kawasan"] = round(hasil["terbakar_ha"] / hasil["luas_kawasan_ha"] * 100, 2) if hasil["luas_kawasan_ha"] else None
     return hasil, dict(type="FeatureCollection", features=fitur)
+
+
+def bidang(sets, tn_path, resort_path, mmdd="06-01", mode="gabung", iou_sama=0.9):
+    """Bidang delineasi apa adanya (TIDAK digabung): satu fitur per poligon di file, dengan luasnya sendiri.
+    Bidang yang bersebelahan bisa terbakar pada bulan berbeda; waktunya ditentukan dari titik panas (tab Asal Api).
+    Mode gabung: poligon yang dikirim lagi di file lebih baru (IoU >= iou_sama dengan bidang lama) dianggap bidang
+    yang sama, geometrinya diganti versi terbaru. Mode terbaru: hanya file pada tanggal terakhir."""
+    from pyproj import Transformer
+    ke_wgs = lambda g, t=Transformer.from_crs(UTM, 4326, always_xy=True): _transform(t, g)
+    kosong = dict(type="FeatureCollection", features=[])
+    if not sets:
+        return kosong
+    musim = awal_musim(max(s["tanggal"] for s in sets), mmdd)
+    sets = [s for s in sets if s["tanggal"] >= musim]
+    if mode == "terbaru" and sets:
+        akhir = max(s["tanggal"] for s in sets)
+        sets = [s for s in sets if s["tanggal"] == akhir]
+    daftar = []
+    for s in sets:
+        geoms, _ = baca_file(s["utama"], atribut=True)
+        for r in geoms:
+            g = r["g"]
+            if g.area < 1.0:
+                continue
+            sama = None
+            for b in daftar:
+                if b["g"].intersects(g):
+                    i = b["g"].intersection(g).area
+                    if i / (b["g"].area + g.area - i) >= iou_sama:
+                        sama = b
+                        break
+            asal = dict(g=g, file=s["nama"], lapis=r["lapis"], fid=r["fid"], asli=r["atribut"])
+            if sama is not None:
+                sama.update(asal)
+            else:
+                daftar.append(dict(asal, tanggal=s["tanggal"]))
+    tn = batas(tn_path)[0][1]
+    resort = batas(resort_path)
+    fitur = []
+    for i, b in enumerate(daftar, 1):
+        g = b["g"]
+        a = g.area
+        di_tn = g.intersection(tn).area / a if a else 0.0
+        ov = [(g.intersection(rg).area, p["nama"]) for p, rg in resort]
+        ov = max(ov) if ov else (0.0, None)
+        asli = dict(list(b["asli"].items())[:12])
+        fitur.append(dict(type="Feature", geometry=_geojson(g, ke_wgs), properties=dict(
+            id=f"B{i:03d}", luas_ha=round(a / 10000.0, 2), resort=ov[1] if ov[0] > 0 else None,
+            tn_persen=round(100.0 * di_tn, 1), luar_kawasan=di_tn < 0.5, tanggal=b["tanggal"].isoformat(),
+            file=b["file"], lapis=b["lapis"], fid=b["fid"], asli=asli)))
+    return dict(type="FeatureCollection", features=fitur)
 
 
 def tulis(hasil, gj, status, geojson):

@@ -28,6 +28,10 @@ Sistem koordinat bebas (UTM 50S, WGS84, dan lainnya) asalkan ada `.prj`. Hanya p
 - Delineasi sebelum awal musim (20 Februari, kebakaran pertama 2026) diabaikan, sehingga musim baru mulai dari nol tanpa
   perlu menghapus file lama. Tanggalnya diatur di `awal_musim` bagian `[delineasi]` di
   [`config/tambora.toml`](../config/tambora.toml); setelah diubah, rekap dihitung ulang otomatis.
+- **Satu poligon = satu bidang.** Bidang yang bersebelahan atau tumpang tindih **tidak digabung**: masing-masing
+  tampil dengan luasnya sendiri, karena bidang bersebelahan bisa terbakar pada bulan berbeda. Waktu terbakar tiap
+  bidang ditentukan dari jam titik panas yang jatuh di bidang itu (tab Asal Api). Poligon yang dikirim lagi di file
+  lebih baru (bentuknya hampir sama, IoU ≥ 0,9) dianggap bidang yang sama, jadi tidak dobel.
 - Untuk memperbaiki delineasi: ganti atau hapus file yang salah. Bila tiap file selalu kumulatif dan koreksi yang
   memperkecil areal harus ikut terpakai, ubah `mode = "terbaru"` di [`config/tambora.toml`](../config/tambora.toml).
 
@@ -37,8 +41,10 @@ Workflow **Areal terbakar (delineasi manual)** memeriksa folder setiap jam dan h
 berubah. Untuk memperbarui saat itu juga: tab **Actions → Areal terbakar (delineasi manual) → Run workflow**.
 
 Hasilnya disimpan di repo: [`docs/status/areal_terbakar.json`](status/areal_terbakar.json) (rekap per resort dan
-riwayat per delineasi) dan [`docs/data/areal_terbakar.geojson`](data/areal_terbakar.geojson) (poligon per tanggal
-dan resort, bisa dibuka di QGIS).
+riwayat per delineasi), [`docs/data/areal_terbakar.geojson`](data/areal_terbakar.geojson) (poligon gabungan per
+tanggal dan resort, untuk rekap luas), dan [`docs/data/areal_terbakar_bidang.geojson`](data/areal_terbakar_bidang.geojson)
+(bidang apa adanya dengan atribut asli dan FID rekaman SHP, bisa dibuka di QGIS/ArcGIS). Waktu terbakar tiap bidang
+bisa diunduh sebagai GeoJSON/CSV dari tab Asal Api.
 
 Selama folder masih kosong, dashboard menampilkan estimasi Sentinel-2 seperti sebelumnya.
 

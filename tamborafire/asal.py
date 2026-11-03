@@ -36,7 +36,7 @@ import zipfile
 import numpy as np
 from numba import njit
 
-VERSI = 1
+VERSI = 2
 ZONA_JAM = {"WIB": 7, "WITA": 8, "WIT": 9, "UTC": 0, "GMT": 0, "Z": 0}
 _BULAN = {m: i + 1 for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split())}
 _BULAN.update({"mei": 5, "agu": 8, "agt": 8, "okt": 10, "des": 12, "nop": 11})
@@ -332,10 +332,28 @@ def raster_poligon(path, grid):
     return rasterize([(g, 1) for g in geoms], out_shape=grid.shape, transform=grid.transform).astype(bool)
 
 
-def areal_terbakar(grid, delineasi, tn_mask=None, s2_tif=None, log=print):
-    """Maska terbakar: delineasi manual, ditambah bekas terbakar Sentinel-2 (nilai 1) di luar kawasan TN."""
-    m = raster_poligon(delineasi, grid) if delineasi and os.path.exists(delineasi) else np.zeros(grid.shape, bool)
-    info = dict(delineasi_ha=round(float(m.sum() * grid.res ** 2 / 1e4), 1))
+def areal_terbakar(grid, delineasi, tn_mask=None, s2_tif=None, bidang=None, log=print):
+    """Maska terbakar dan satuan areal. Satuan = bidang delineasi apa adanya bila file bidang ada (bidang yang
+    bersebelahan tetap terpisah karena bisa terbakar pada bulan berbeda), lalu komponen terhubung sisanya
+    (delineasi tanpa file bidang, bekas terbakar Sentinel-2 di luar kawasan TN).
+    Mengembalikan (maska, info, satuan) dengan satuan = dict(lab, n_bidang, n, props, geom (UTM))."""
+    from rasterio.features import rasterize
+    from scipy import ndimage
+    lab = np.zeros(grid.shape, np.int32)
+    props, geom = [], []
+    if bidang and os.path.exists(bidang):
+        items = [(g, p) for g, p in _geojson_utm(bidang, grid.ke_utm) if not g.is_empty]
+        urut = sorted(range(len(items)), key=lambda i: -items[i][0].area)   # bidang kecil menang di tumpang tindih
+        if items:
+            lab = rasterize([(items[i][0], i + 1) for i in urut], out_shape=grid.shape, transform=grid.transform,
+                            dtype="int32")
+        props = [p for _, p in items]
+        geom = [g for g, _ in items]
+        m = lab > 0
+    else:
+        m = raster_poligon(delineasi, grid) if delineasi and os.path.exists(delineasi) else np.zeros(grid.shape, bool)
+    nb = len(props)
+    info = dict(delineasi_ha=round(float(m.sum() * grid.res ** 2 / 1e4), 1), bidang=nb)
     if s2_tif and os.path.exists(s2_tif):
         import rasterio
         from rasterio.warp import reproject, Resampling
@@ -349,9 +367,11 @@ def areal_terbakar(grid, delineasi, tn_mask=None, s2_tif=None, log=print):
             s2 &= ~tn_mask
         info["s2_luar_tn_ha"] = round(float((s2 & ~m).sum() * grid.res ** 2 / 1e4), 1)
         m |= s2
-    log(f"areal terbakar: delineasi {info['delineasi_ha']} ha" +
+    kl, nk = ndimage.label(m & (lab == 0), structure=np.ones((3, 3), bool))
+    lab = np.where(kl > 0, kl + nb, lab).astype(np.int32)
+    log(f"areal terbakar: delineasi {info['delineasi_ha']} ha" + (f" ({nb} bidang)" if nb else "") +
         (f", + Sentinel-2 di luar TN {info['s2_luar_tn_ha']} ha" if "s2_luar_tn_ha" in info else ""))
-    return m, info
+    return m, info, dict(lab=lab, n_bidang=nb, n=nb + int(nk), props=props, geom=geom)
 
 
 # =============================================================== kejadian
@@ -397,13 +417,28 @@ def kelompokkan(xy, jam, burn=None, grid=None, jarak_m=1500.0, jeda_jam=36.0, v_
     return np.array([first[l] for l in lab])
 
 
-def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0):
-    """Bagi sel terbakar ke kejadian. Satu poligon (komponen terhubung) hanya dibagi ke kejadian yang titik
-    panasnya <= radius_m dari poligon itu; sel ke titik panas terdekat (<= maks_m bila poligon dipakai lebih dari
-    satu kejadian). Mengembalikan raster kejadian (-1 = tanpa titik panas), label komponen, dan info per titik."""
+DALAM_KUAT_M = 200.0     # titik panas sejauh ini dari tepi bidang dianggap benar-benar api di bidang itu
+
+
+def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0, satuan=None):
+    """Bagi sel terbakar ke kejadian. Satu satuan areal hanya dibagi ke kejadian yang titik panasnya <= radius_m
+    dari satuan itu. Satuan = bidang delineasi (satuan["lab"] 1..n_bidang) atau komponen terhubung.
+    - Bidang: pada dasarnya utuh untuk satu kejadian. Bobot titik panas: di dalam bidang 0,2-1 menurut jarak ke
+      tepi bidang (titik di tepi bisa berasal dari api di bidang sebelah karena piksel VIIRS 375 m), di luar 0,1.
+      Kejadian "kuat" = bobot titiknya yang >= DALAM_KUAT_M dari tepi >= 1. Pemilik = kejadian kuat; tanpa
+      kejadian kuat -> bobot total terbesar (seri -> kejadian paling awal). Kejadian yang tidak memiliki areal
+      sama sekali (bukan limpahan dari bidang sebelah) tetapi bobot titiknya di dalam bidang >= 1 ikut menjadi
+      pemilik. Bidang dengan >= 2 pemilik (terbakar dua kali / memuat dua api) dibagi ke titik panas terdekat
+      dari para pemiliknya.
+    - Komponen lain (mis. bekas terbakar Sentinel-2): sel ke titik panas terdekat (<= maks_m).
+    Mengembalikan raster kejadian (-1 = tanpa titik panas), label satuan, dan jumlah satuan."""
     from scipy import ndimage
     from scipy.spatial import cKDTree
-    lab, nlab = ndimage.label(burn, structure=np.ones((3, 3), bool))
+    if satuan is None:
+        lab, nlab = ndimage.label(burn, structure=np.ones((3, 3), bool))
+        nb = 0
+    else:
+        lab, nlab, nb = satuan["lab"], satuan["n"], satuan["n_bidang"]
     ev = np.full(grid.shape, -1, np.int32)
     if nlab == 0 or len(hs_ev) == 0:
         return ev, lab, nlab
@@ -421,21 +456,59 @@ def bagi_areal(grid, burn, hs_xy, hs_ev, radius_m=400.0, maks_m=2500.0):
         for l in np.unique(sub[dk & (sub > 0)]):
             kand.setdefault(int(l), []).append(i)
     obj = ndimage.find_objects(lab)
-    for l, idx in kand.items():
-        sl = obj[l - 1]
-        m = lab[sl] == l
+
+    def isi(sl, m, idx, es):
+        sub = ev[sl]
+        if len(es) == 1:
+            sub[m] = es[0]
+            return
+        ii = np.array([i for i in idx if int(hs_ev[i]) in es])
         rr, cc = np.nonzero(m)
         x, y = grid.xy(rr + sl[0].start, cc + sl[1].start)
+        _, j = cKDTree(hs_xy[ii]).query(np.column_stack([x, y]))
+        sub[m] = hs_ev[ii[j]]
+
+    bid = {}    # bidang -> (slice, maska, titik kandidat, pemilik, bobot titik di dalam per kejadian)
+    for l, idx in kand.items():
+        sl = obj[l - 1] if l - 1 < len(obj) else None
+        if sl is None:
+            continue
+        m = lab[sl] == l
+        if l <= nb:
+            dalam = ndimage.distance_transform_edt(np.pad(m, 1))[1:-1, 1:-1] * grid.res
+            skor, kuat, w_dalam = {}, {}, {}
+            for i in idx:
+                ri, ci = r[i] - sl[0].start, c[i] - sl[1].start
+                e_i = int(hs_ev[i])
+                if 0 <= ri < m.shape[0] and 0 <= ci < m.shape[1] and m[ri, ci]:
+                    dd = float(dalam[ri, ci])
+                    w = 0.2 + 0.8 * min(1.0, dd / 375.0)
+                    w_dalam[e_i] = w_dalam.get(e_i, 0.0) + w
+                    if dd >= DALAM_KUAT_M:
+                        kuat[e_i] = kuat.get(e_i, 0.0) + w
+                else:
+                    w = 0.1
+                skor[e_i] = skor.get(e_i, 0.0) + w
+            kk = sorted(e for e, v in kuat.items() if v >= 1.0 - 1e-9)
+            bid[l] = (sl, m, idx, kk or [min(skor, key=lambda e: (-round(skor[e], 6), e))], w_dalam)
+            continue
         evs = np.unique(hs_ev[idx])
         if len(evs) == 1:
             sub = ev[sl]
             sub[m] = evs[0]
             continue
+        rr, cc = np.nonzero(m)
+        x, y = grid.xy(rr + sl[0].start, cc + sl[1].start)
         tree = cKDTree(hs_xy[idx])
         d, j = tree.query(np.column_stack([x, y]))
         e = np.where(d <= maks_m, hs_ev[np.array(idx)[j]], -1)
         sub = ev[sl]
         sub[m] = e
+    # kejadian tanpa areal sama sekali yang titiknya jelas di dalam bidang ikut memiliki bagian bidang itu
+    punya = {e for v in bid.values() for e in v[3]} | {int(e) for e in np.unique(ev[ev >= 0])}
+    for l, (sl, m, idx, es, w_dalam) in sorted(bid.items()):
+        tambah = [e for e, w in w_dalam.items() if e not in punya and w >= 1.0 - 1e-9]
+        isi(sl, m, idx, sorted(set(es) | set(tambah)))
     return ev, lab, nlab
 
 
@@ -683,6 +756,58 @@ MATA = ["utara", "timur laut", "timur", "tenggara", "selatan", "barat daya", "ba
 
 def mata_angin(deg):
     return MATA[int(round((deg % 360) / 45.0)) % 8]
+
+
+def laju_api(tiba, areal, res, j0, v_maks=300.0):
+    """Laju rambat muka api per sel (m/menit) = 1/|grad T| dari jam tiba simulasi (seperti keluaran Spread Rate
+    FARSITE), hanya di dalam areal terbakar. Dirangkum per jam WITA: [[jam, rata-rata, p90 (kepala api), n sel], ...].
+    tiba: jam tiba (NaN = tidak terbakar) relatif terhadap jam j0 (jam sejak 2000-01-01 WITA)."""
+    T = np.where(np.isfinite(tiba), tiba * 60.0, np.nan)
+    P = np.pad(T, 1, constant_values=np.nan)
+    c = P[1:-1, 1:-1]
+
+    def turunan(a, b):
+        fa, fb = np.isfinite(a), np.isfinite(b)
+        with np.errstate(invalid="ignore"):
+            return np.where(fa & fb, (a - b) / (2.0 * res),
+                            np.where(fa, (a - c) / res, np.where(fb, (c - b) / res, np.nan)))
+
+    g = np.hypot(turunan(P[1:-1, 2:], P[1:-1, :-2]), turunan(P[2:, 1:-1], P[:-2, 1:-1]))   # menit per meter
+    with np.errstate(invalid="ignore"):
+        ok = np.isfinite(c) & np.isfinite(g) & (g > 1.0 / v_maks) & areal
+    if not ok.any():
+        return None
+    v = 1.0 / g[ok]
+    jam = np.floor(np.mod(j0 + tiba[ok], 24.0)).astype(int) % 24
+    per = []
+    for h in range(24):
+        sv = v[jam == h]
+        if sv.size >= 3:
+            per.append([h, round(float(sv.mean()), 2), round(float(np.percentile(sv, 90)), 2), int(sv.size)])
+    return dict(rata=round(float(v.mean()), 2), kepala=round(float(np.percentile(v, 90)), 2), n=int(v.size), jam=per)
+
+
+def tiba_bidang(ctx, tiba, areal, dom, j0):
+    """Jam tiba api simulasi (p10/p50/p90, WITA) di tiap bidang delineasi di dalam areal kejadian, dan persen sel
+    bidang yang tercapai simulasi. tiba: jam relatif j0 di grid analisis; dom = (r0, r1, c0, c1, f) dari _domain."""
+    sat = getattr(ctx, "satuan", None)
+    if not sat or not sat.get("n_bidang"):
+        return None
+    r0, r1, c0, c1, f = dom
+    ny, nx = tiba.shape
+    lb = _blok(sat["lab"][r0:r1, c0:c1], f, "max")[:ny, :nx]
+    lb = np.where(areal & (lb <= sat["n_bidang"]), lb, 0)
+    out = {}
+    for l in np.unique(lb[lb > 0]):
+        a = tiba[lb == l]
+        ok = np.isfinite(a)
+        d = dict(tercapai=round(100.0 * float(ok.mean()), 1))
+        if ok.any():
+            q = np.percentile(a[ok], [10, 50, 90])
+            d.update(awal=_jam_wita(ctx.jam_ke_waktu(j0 + q[0])), tengah=_jam_wita(ctx.jam_ke_waktu(j0 + q[1])),
+                     akhir=_jam_wita(ctx.jam_ke_waktu(j0 + q[2])))
+        out[str(sat["props"][int(l) - 1].get("id") or f"B{int(l):03d}")] = d
+    return out
 
 
 def _jam_wita(t: dt.datetime):
@@ -1294,6 +1419,12 @@ def analisis(ctx, ev, k_grid, logp_k, stage="bebas", maks_titik=16, log=print, f
             la, lo = ctx.ll(xe, ye)
             res["masuk_tn"] = dict(lat=la, lon=lo, t=_jam_wita(ctx.jam_ke_waktu(j_lo + float(aa.flat[jj]))),
                                    resort=_resort(ctx, xe, ye), arah=mata_angin(azimut(x0, y0, xe, ye)))
+    # ---------------- laju api (m/menit) dari simulasi terbaik, per jam WITA
+    res["laju"] = laju_api(arr, obs, ls.res, j_lo)
+    # ---------------- jam tiba api di tiap bidang delineasi kejadian ini (simulasi terbaik)
+    bt = tiba_bidang(ctx, arr, obs, (r0, r1, c0, c1, f), j_lo)
+    if bt:
+        res["bidang_tiba"] = bt
     # ---------------- data peta
     peta = dict(z50=_poligon_ll(ctx, z50, gk), z90=_poligon_ll(ctx, z90, gk), areal=_poligon_ll(ctx, obs, ls, ls.res))
     # garis waktu (isokron) hanya di dalam areal kejadian: muka api simulasi terbaik tiap 1-6 jam
@@ -1422,8 +1553,62 @@ def _mutu(h):
 
 
 # =============================================================== alur lengkap
-def siapkan(ctx, min_ha=1.0, log=print):
-    """Bersihkan titik panas, kelompokkan per kejadian, bagi areal terbakar. Mengembalikan daftar kejadian."""
+def zona_tn(ctx, zona_m):
+    """Sel di dalam kawasan TN atau berjarak <= zona_m dari batasnya (None = tanpa batas)."""
+    from scipy import ndimage
+    if zona_m is None or not ctx.tn.any():
+        return None
+    return ndimage.distance_transform_edt(~ctx.tn) * ctx.g.res <= float(zona_m)
+
+
+def _info_bidang(ctx, satuan, ras, comp, ip, lab, radius_m=450.0):
+    """Per bidang delineasi: kejadian pemiliknya (dari bagi_areal) dan titik panas (indeks ctx.hs) di dalam bidang
+    atau <= radius_m darinya. Bidang yang terlalu kecil untuk grid 30 m dipilihkan kejadian dengan bobot yang sama
+    seperti bagi_areal (titik di dalam 0,2-1 menurut jarak ke tepi bidang, titik di luar 0,1)."""
+    import shapely
+    from scipy import ndimage
+    nb = satuan["n_bidang"] if satuan else 0
+    if not nb:
+        return []
+    obj = ndimage.find_objects(comp, max_label=nb)
+    ip = np.asarray(ip, int)
+    pts = shapely.points(ctx.xy[ip, 0], ctx.xy[ip, 1]) if ip.size else None
+    out = []
+    for l in range(1, nb + 1):
+        gb, pr = satuan["geom"][l - 1], satuan["props"][l - 1]
+        sl = obj[l - 1] if l - 1 < len(obj) else None
+        sel, e, bagian = 0, -1, {}
+        if sl is not None:
+            m = comp[sl] == l
+            sel = int(m.sum())
+            v = ras[sl][m]
+            v = v[v >= 0]
+            if v.size:
+                n = np.bincount(v)
+                e = int(n.argmax())
+                bagian = {int(k): int(n[k]) for k in np.flatnonzero(n)}
+        di = dk = np.zeros(0, int)
+        if pts is not None:
+            d = shapely.distance(gb, pts)
+            di, dk = np.flatnonzero(d <= 0.0), np.flatnonzero((d > 0.0) & (d <= radius_m))
+        if e < 0 and sel == 0 and (di.size or dk.size):
+            skor = {}
+            dalam = shapely.distance(gb.boundary, pts[di]) if di.size else np.zeros(0)
+            for j, dd in zip(di, dalam):
+                skor[int(lab[j])] = skor.get(int(lab[j]), 0.0) + 0.2 + 0.8 * min(1.0, float(dd) / 375.0)
+            for j in dk:
+                skor[int(lab[j])] = skor.get(int(lab[j]), 0.0) + 0.1
+            e = min(skor, key=lambda k: (-round(skor[k], 6), k))
+        out.append(dict(l=l, id=str(pr.get("id") or f"B{l:03d}"), props=pr, sel=sel, e=e, bagian=bagian or {e: 0},
+                        di=[int(ip[j]) for j in di], dekat=[int(ip[j]) for j in dk],
+                        di_ev=[int(ip[j]) for j in di if int(lab[j]) == e]))
+    return out
+
+
+def siapkan(ctx, min_ha=1.0, zona_m=None, log=print):
+    """Bersihkan titik panas, kelompokkan per kejadian, bagi areal terbakar. Mengembalikan daftar kejadian.
+    zona_m: kejadian di luar TN hanya dihitung bila titik panas atau areal terbakarnya <= zona_m dari batas TN
+    (areal kejadian yang lolos tetap utuh, termasuk bagian yang lebih jauh)."""
     from scipy import ndimage
     g = ctx.g
     r, c = g.rc(ctx.xy[:, 0], ctx.xy[:, 1])
@@ -1438,7 +1623,8 @@ def siapkan(ctx, min_ha=1.0, log=print):
     lab = kelompokkan(ctx.xy[ip], ctx.jam[ip], ctx.burn, g)
     ev_hs = np.full(len(ctx.hs), -1)
     ev_hs[ip] = lab
-    ras, comp, ncomp = bagi_areal(g, ctx.burn, ctx.xy[ip], lab)
+    satuan = getattr(ctx, "satuan", None)
+    ras, comp, ncomp = bagi_areal(g, ctx.burn, ctx.xy[ip], lab, satuan=satuan)
     ha = g.res ** 2 / 1e4
     luas = np.bincount(ras[ras >= 0].ravel(), minlength=lab.max() + 1 if len(lab) else 0) * ha
     evs = []
@@ -1457,25 +1643,67 @@ def siapkan(ctx, min_ha=1.0, log=print):
         n = pakai_id.get(base, 0)
         pakai_id[base] = n + 1
         ev["id"] = base + ("" if n == 0 else "-" + "abcdefghij"[min(n, 9)])
+    zona = zona_tn(ctx, zona_m)
+    ctx.zona = zona
+    zh = np.ones(len(ctx.hs), bool)
+    if zona is not None:
+        zh[:] = False
+        zh[di_aoi] = zona[r[di_aoi], c[di_aoi]]
+        ev_zona = set(np.unique(ras[zona & (ras >= 0)]).tolist())
     for i in range(len(ctx.hs)):
         ctx.hs[i]["ev"] = evs[ev_hs[i]]["id"] if ev_hs[i] >= 0 else None
         ctx.hs[i]["tn"] = bool(tn[i])
+        ctx.hs[i]["zona"] = bool(zh[i])
+    for ev in evs:
+        ev["zona"] = zona is None or ev["e"] in ev_zona or bool(zh[ev["idx"]].any())
+    # bidang delineasi: kejadian pemiliknya dan titik panas di dalam / dekat bidang
+    ctx.bidang = _info_bidang(ctx, satuan, ras, comp, ip, lab)
+    per_ev = {}
+    for b in ctx.bidang:
+        for e in b["bagian"]:
+            if e >= 0:
+                per_ev.setdefault(e, []).append(b["id"])
+    for ev in evs:
+        ev["bidang"] = per_ev.get(ev["e"], [])
+    nb = satuan["n_bidang"] if satuan else 0
+    obj = ndimage.find_objects(comp, max_label=ncomp) if ncomp else []
     tanpa = []
     for l in range(1, ncomp + 1):
-        m = (comp == l) & (ras < 0)
+        sl = obj[l - 1]
+        if sl is None:
+            continue
+        cm = comp[sl] == l
+        m = cm & (ras[sl] < 0)
+        if not m.any() or (zona is not None and not (m & zona[sl]).any()):
+            continue
         a = float(m.sum() * ha)
-        if a >= 5 and not ((comp == l) & (ras >= 0)).any():
+        if a >= 5 and not (cm & (ras[sl] >= 0)).any():
             rr, cc = np.nonzero(m)
-            x, y = g.xy(rr.mean(), cc.mean())
+            x, y = g.xy(rr.mean() + sl[0].start, cc.mean() + sl[1].start)
             la, lo = ctx.ll(x, y)
-            tanpa.append(dict(luas_ha=round(a, 1), lat=la, lon=lo, resort=_resort(ctx, x, y)))
+            t = dict(luas_ha=round(a, 1), lat=la, lon=lo, resort=_resort(ctx, x, y))
+            if l <= nb:
+                t["bidang"] = ctx.bidang[l - 1]["id"]
+            tanpa.append(t)
+    tanpa_m = (ras < 0) & ctx.burn & (zona if zona is not None else True)
+    n_zona = sum(1 for ev in evs if ev["zona"])
     info = dict(titik_aoi=int(di_aoi.sum()), titik_dipakai=int(pakai.sum()), titik_rendah_dibuang=int((di_aoi & ~pakai).sum()),
-                kejadian=len(evs), areal_tanpa_titik_panas_ha=round(float(((ras < 0) & ctx.burn).sum() * ha), 1),
+                kejadian=len(evs), areal_tanpa_titik_panas_ha=round(float(tanpa_m.sum() * ha), 1),
                 poligon_tanpa_titik_panas=sorted(tanpa, key=lambda t: -t["luas_ha"])[:30])
-    log(f"titik panas: {info['titik_aoi']} di AOI, {info['titik_dipakai']} dipakai; {len(evs)} kejadian; "
-        f"areal tanpa titik panas {info['areal_tanpa_titik_panas_ha']} ha")
+    if ctx.bidang:
+        info.update(bidang=len(ctx.bidang), bidang_titik_di_dalam=sum(1 for b in ctx.bidang if b["di_ev"]),
+                    bidang_titik_dekat=sum(1 for b in ctx.bidang if b["e"] >= 0 and not b["di_ev"]),
+                    bidang_tanpa_titik=sum(1 for b in ctx.bidang if b["e"] < 0))
+    if zona is not None:
+        info.update(zona_luar_tn_m=float(zona_m), titik_zona=int((pakai & zh).sum()), kejadian_zona=n_zona,
+                    kejadian_luar_zona=len(evs) - n_zona,
+                    kejadian_luar_zona_ha=round(sum(ev["luas_ha"] for ev in evs if not ev["zona"]), 1))
+    log(f"titik panas: {info['titik_aoi']} di AOI, {info['titik_dipakai']} dipakai; {len(evs)} kejadian"
+        + (f" ({n_zona} di TN + zona {zona_m:.0f} m)" if zona is not None else "")
+        + f"; areal tanpa titik panas {info['areal_tanpa_titik_panas_ha']} ha")
     for ev in evs:
-        ev["layak"] = ev["luas_ha"] >= min_ha
+        ev["blok_ok"] = ev["luas_ha"] >= min_ha
+        ev["layak"] = ev["blok_ok"] and ev["zona"]
         ev["ras_id"] = ev["e"]
     ctx.ras = ras
     return evs, info
@@ -1537,7 +1765,7 @@ def jalankan(ctx, evs, lama=None, proses=4, hanya=None, log=print):
         ev["mask"] = ctx.ras == ev["ras_id"]
         ev["tahap"] = _tahap(ev, ctx)
     # areal kejadian sebelumnya (selesai >= 6 jam sebelum kejadian ini mulai) = sudah terbakar
-    selesai = sorted([(ev["j_akhir"], ev["ras_id"]) for ev in evs if ev["layak"]])
+    selesai = sorted([(ev["j_akhir"], ev["ras_id"]) for ev in evs if ev.get("blok_ok", ev["layak"])])
     for ev in evs:
         if ev["layak"]:
             dulu = [rid for ja, rid in selesai if ja < ev["j_awal"] - 6.0]
@@ -1548,7 +1776,7 @@ def jalankan(ctx, evs, lama=None, proses=4, hanya=None, log=print):
         hs = [(ctx.hs[i]["t"].isoformat(), round(ctx.hs[i]["lat"], 5), round(ctx.hs[i]["lon"], 5), ctx.hs[i]["sensor"]) for i in ev["idx"]]
         mk = hashlib.sha1(np.packbits(ev["mask"]).tobytes()).hexdigest()[:10]
         bk = hashlib.sha1(np.packbits(ev["blok"]).tobytes()).hexdigest()[:10] if ev["blok"] is not None else "-"
-        return sidik(VERSI, PAR, BETA, hs, mk, bk, extra, ctx.fmd_sig, ctx.ros_adjust)
+        return sidik(VERSI, PAR, BETA, hs, mk, bk, extra, ctx.fmd_sig, ctx.ros_adjust, ev.get("bidang") or [])
 
     def putaran(daftar, stage):
         tugas = []
@@ -1627,11 +1855,84 @@ def _ringkas_kejadian(ctx, ev, h):
     out = dict(id=ev["id"], deteksi_awal=_jam_wita(ev["t_awal"]), deteksi_akhir=_jam_wita(ev["t_akhir"]), n_titik=ev["n"],
                n_lintasan=ev["n_lintasan"], sensor=dict(sensor), luas_ha=ev["luas_ha"],
                tn_persen=round(100 * float(ctx.tn[m].mean()), 1) if m.any() else 0.0, resort=resort,
-               desa=desa.most_common(1)[0][0] if desa else None, tahap=ev.get("tahap"))
+               desa=desa.most_common(1)[0][0] if desa else None, tahap=ev.get("tahap"), bidang=ev.get("bidang") or [])
     if h:
         for k, v in h.items():
             if not k.startswith("_") and k not in ("residu",):
                 out[k] = v
+    return out
+
+
+def waktu_bidang(ctx, evs, hasil, baris):
+    """Waktu terbakar tiap bidang delineasi = jam titik panas kejadian pemiliknya yang jatuh DI DALAM bidang
+    (deteksi pertama-terakhir). Bila tidak ada: titik panas kejadian itu <= 400 m dari bidang, lalu jam tiba api
+    simulasi kejadian (mutu baik/sedang). Jam MULAI terbakar tetap per kejadian dari pemodelan terbalik.
+    Bidang yang dibagi dua kejadian kuat (lihat bagi_areal) mendapat daftar "bagian" per kejadian."""
+    evid = {ev["e"]: ev for ev in evs}
+    row = {r["id"]: r for r in baris}
+    ha = ctx.g.res ** 2 / 1e4
+    urut = lambda ii: sorted(ii, key=lambda i: ctx.jam[i])
+
+    def satu(b, e, sel):
+        ev = evid.get(e)
+        eid = ev["id"] if ev else None
+        h = hasil.get(eid) if eid else None
+        r = row.get(eid, {})
+        di = urut(i for i in b["di"] if eid and ctx.hs[i].get("ev") == eid)
+        dk = urut(i for i in b["dekat"] if eid and ctx.hs[i].get("ev") == eid)
+        d = dict(kejadian=eid, n_titik=len(di), n_titik_dekat=len(dk))
+        if sel:
+            d["luas_bagian_ha"] = round(sel * ha, 1)
+        if di or dk:
+            j = di or dk
+            d.update(titik_awal=_jam_wita(ctx.hs[j[0]]["t"]), titik_akhir=_jam_wita(ctx.hs[j[-1]]["t"]))
+        if h:
+            d.update(mutu=r.get("mutu") or h.get("mutu"), mulai=h.get("t_mulai_p50") or h.get("t_mulai"),
+                     mulai_p05=h.get("t_mulai_p05"), mulai_p95=h.get("t_mulai_p95"))
+            if (h.get("bidang_tiba") or {}).get(b["id"]):
+                d["tiba_simulasi"] = h["bidang_tiba"][b["id"]]
+        elif ev is not None:
+            d["catatan"] = ("di luar batas analisis (TN + zona luar)" if not ev.get("zona", True) else
+                            "areal kejadian terlalu kecil" if not ev.get("blok_ok", True) else
+                            (r.get("catatan") or "kejadian tidak terhitung"))
+        ts = d.get("tiba_simulasi") or {}
+        if di:
+            d.update(waktu_awal=d["titik_awal"], waktu_akhir=d["titik_akhir"], sumber="titik panas di bidang")
+        elif dk:
+            d.update(waktu_awal=d["titik_awal"], waktu_akhir=d["titik_akhir"], sumber="titik panas dekat (≤ 400 m)")
+        elif ts.get("tengah") and d.get("mutu") in ("baik", "sedang") and ts.get("tercapai", 0) >= 50:
+            d.update(waktu_awal=ts["awal"], waktu_akhir=ts["akhir"], sumber="jam tiba api simulasi")
+        else:
+            d["sumber"] = "tanpa titik panas" if eid is None else "tidak pasti"
+        return d
+
+    out = {}
+    for b in getattr(ctx, "bidang", None) or []:
+        p = b["props"]
+        bag = [satu(b, e, n) for e, n in sorted(b["bagian"].items(), key=lambda kv: (-kv[1], kv[0]))]
+        d = dict(bag[0])
+        d.pop("luas_bagian_ha", None)
+        d = dict(luas_ha=p.get("luas_ha"), resort=p.get("resort"), luar_kawasan=p.get("luar_kawasan"), **d)
+        if len(bag) > 1:
+            bag.sort(key=lambda x: x.get("waktu_awal") or "9999")
+            wa = [x["waktu_awal"] for x in bag if x.get("waktu_awal")]
+            wz = [x["waktu_akhir"] for x in bag if x.get("waktu_akhir")]
+            d.update(bagian=bag, n_titik=sum(x["n_titik"] for x in bag),
+                     sumber=f"titik panas di bidang ({len(bag)} kejadian)")
+            if wa:
+                d.update(waktu_awal=min(wa), waktu_akhir=max(wz))
+        ids = {x["kejadian"] for x in bag}
+        lain = {}
+        for i in b["di"]:
+            e2 = ctx.hs[i].get("ev")
+            if e2 and e2 not in ids:
+                x = lain.setdefault(e2, [0, ctx.hs[i]["t"]])
+                x[0] += 1
+                x[1] = min(x[1], ctx.hs[i]["t"])
+        if lain:
+            d["titik_kejadian_lain"] = [dict(kejadian=k, n=v[0], awal=_jam_wita(v[1]))
+                                        for k, v in sorted(lain.items(), key=lambda kv: kv[1][1])]
+        out[b["id"]] = d
     return out
 
 
@@ -1683,8 +1984,26 @@ def tulis_hasil(ctx, evs, info, hasil, gagal, status_path, folder, meta=None, lo
     json.dump(dict(type="FeatureCollection", features=fitur), open(os.path.join(folder, "peta.geojson"), "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))
     # titik panas untuk peta
-    aoi = [p for p in ctx.hs if p.get("tn") is not None and _dalam_grid(ctx, p)]
+    aoi = [p for p in ctx.hs if p.get("tn") is not None and _dalam_grid(ctx, p) and (p.get("zona", True) or p.get("ev") in ada)]
     tulis_hotspot(aoi, os.path.join(folder, "titik_panas.geojson"))
+    # batas zona analisis (TN + zona luar) untuk peta
+    pz = os.path.join(folder, "zona.geojson")
+    if getattr(ctx, "zona", None) is not None:
+        gz = _poligon_ll(ctx, ctx.zona, ctx.g, toleransi=45.0)
+        json.dump(dict(type="FeatureCollection", features=[dict(type="Feature", geometry=gz, properties=dict(
+            jarak_m=(info or {}).get("zona_luar_tn_m")))]), open(pz, "w", encoding="utf-8"), separators=(",", ":"))
+    elif os.path.exists(pz):
+        os.remove(pz)
+    # waktu terbakar per bidang delineasi
+    pbw = os.path.join(folder, "bidang_waktu.json")
+    wb = waktu_bidang(ctx, evs, hasil, baris)
+    if wb:
+        from collections import Counter as _C
+        json.dump(dict(dibuat=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(), zona="WITA",
+                       sumber=dict(_C(v["sumber"] for v in wb.values())), bidang=wb),
+                  open(pbw, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+    elif os.path.exists(pbw):
+        os.remove(pbw)
     # jam rawan
     jr_semua, jr_bs, det_awal = np.zeros(24), np.zeros(24), np.zeros(24)
     n_bs = 0

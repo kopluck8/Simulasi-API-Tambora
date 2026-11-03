@@ -46,7 +46,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/status/areal_terbakar.json docs/data/areal_terbakar.geojson 2>/dev/null || true
+          for f in docs/status/areal_terbakar.json docs/data/areal_terbakar.geojson docs/data/areal_terbakar_bidang.geojson; do
+            if [ -e "$f" ]; then git add "$f"; fi
+          done
           if git diff --cached --quiet; then echo "Tidak ada perubahan."; exit 0; fi
           git commit -m "Update areal terbakar $(python -c "import json;print(json.load(open('docs/status/areal_terbakar.json')).get('tanggal') or 'kosong')")"
           git pull --rebase -q origin main && git push

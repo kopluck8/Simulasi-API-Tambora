@@ -282,6 +282,14 @@ td .as-bulat{width:8px;height:8px;border-width:1px}
 .as-ramp-label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);width:180px;max-width:100%}
 .as-belah{display:inline-block;width:10px;height:10px;background:#00e5ff;border:2px solid #0b3a40;transform:rotate(45deg);margin:0 8px 0 2px;vertical-align:0}
 .as-belah.besar{width:11px;height:11px;margin:2px}
+button.tautan{background:none;border:0;border-radius:0;padding:0;color:var(--brand);font-weight:600;text-decoration:underline;text-underline-offset:2px;display:inline;gap:0}
+button.tautan:hover{text-decoration-thickness:2px}
+.as-pop p{margin:6px 0 0}
+.as-pop ul{margin:4px 0 0;padding-left:18px}
+.as-pop li{margin:4px 0}
+.as-pop .mutu{font-size:11px}
+.as-unduh-bidang{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px}
+.as-garis-zona{display:inline-block;width:22px;height:0;border-top:2px dotted #c9b800;margin:0 8px 3px 0;vertical-align:middle}
 .as-legenda{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:4px 0 6px}
 .as-legenda i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
 .as-legenda i.bulat{border-radius:50%}
@@ -301,6 +309,16 @@ td .as-bulat{width:8px;height:8px;border-width:1px}
 .as-acuan{stroke:var(--muted);stroke-width:1.5}
 .as-b-model{fill:var(--as-s2)}
 .as-b-det{fill:var(--as-abu)}
+.as-titik-kepala{fill:var(--fg);stroke:var(--card);stroke-width:1.2}
+.as-pita-periode{fill:var(--fg);fill-opacity:.04}
+.as-laju-ubin{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 8px}
+.as-ubin{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card)}
+.as-ubin>span{display:block;font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.as-ubin>span small{text-transform:none;letter-spacing:0;font-size:12px}
+.as-ubin>b{display:block;font-size:22px;font-variant-numeric:tabular-nums;margin:4px 0 2px}
+.as-ubin>b small{font-size:13px;font-weight:600;color:var(--muted)}
+.as-ubin>small{display:block;font-size:12.5px;color:var(--muted);line-height:1.45}
+@media (max-width:700px){.as-laju-ubin{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .as-hit{fill:transparent;cursor:default}
 .as-hit.aktif{fill:var(--fg);fill-opacity:.05}
 .as-area{fill:var(--as-s2);fill-opacity:.14}

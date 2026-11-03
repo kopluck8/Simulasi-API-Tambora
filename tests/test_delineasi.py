@@ -80,3 +80,32 @@ def test_sidik_ikut_pengaturan():
     f = [{"name": "delineasi_2026-10-30.zip", "md5Checksum": "a", "modifiedTime": "t"}]
     assert D.sidik(f) == D.sidik(f, "")
     assert D.sidik(f, "06-01|gabung|0.01") != D.sidik(f, "02-20|gabung|0.01")
+
+
+def _geojson_banyak(path, kotak_list):
+    fs = []
+    for i, (x0, y0, x1, y1) in enumerate(kotak_list):
+        ring = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
+        fs.append({"type": "Feature", "properties": {"Nama": f"bidang {i + 1}"}, "geometry": {"type": "Polygon", "coordinates": [ring]}})
+    json.dump({"type": "FeatureCollection", "features": fs}, open(path, "w"))
+
+
+def test_bidang_tidak_digabung(tmp_path):
+    """Bidang bersebelahan tetap terpisah dengan luas sendiri; bidang yang dikirim ulang tidak dobel."""
+    _geojson_banyak(tmp_path / "2026-09-01.geojson", [(118.000, -8.360, 118.010, -8.350),
+                                                     (118.010, -8.360, 118.020, -8.350)])     # bersinggungan
+    _geojson_banyak(tmp_path / "2026-10-30.geojson", [(118.010, -8.360, 118.020, -8.350),     # dikirim ulang
+                                                     (118.020, -8.360, 118.025, -8.350)])     # bidang baru
+    sets = D.kumpulan_lokal(str(tmp_path))
+    gb = D.bidang(sets, TN, RESORT)
+    p = [f["properties"] for f in gb["features"]]
+    assert [x["id"] for x in p] == ["B001", "B002", "B003"]
+    assert p[0]["luas_ha"] == pytest.approx(p[1]["luas_ha"], rel=0.01)                     # tidak digabung
+    assert p[2]["luas_ha"] == pytest.approx(p[0]["luas_ha"] / 2, rel=0.02)
+    assert p[1]["tanggal"] == "2026-09-01" and p[1]["file"] == "2026-10-30.geojson"         # versi terbaru, tanggal awal
+    assert p[1]["fid"] == 0 and p[2]["fid"] == 1 and p[2]["lapis"] == "2026-10-30.geojson"  # FID rekaman asli
+    assert p[0]["asli"] == {"Nama": "bidang 1"} and p[0]["resort"]
+    hasil, gj = D.olah(sets, TN, RESORT)
+    assert hasil["terbakar_ha"] == pytest.approx(sum(x["luas_ha"] for x in p), rel=0.01)   # rekap tetap tanpa dobel
+    terbaru = [f["properties"] for f in D.bidang(sets, TN, RESORT, mode="terbaru")["features"]]
+    assert [x["id"] for x in terbaru] == ["B001", "B002"] and {x["tanggal"] for x in terbaru} == {"2026-10-30"}
