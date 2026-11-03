@@ -1,6 +1,6 @@
 {
  "versi": 2,
- "dibuat": "2026-11-03T02:12:34+00:00",
+ "dibuat": "2026-11-03T03:42:40+00:00",
  "zona": "WITA",
  "metode": {
   "nama": "inversi FARSITE mundur-maju (backward/forward travel-time inversion)",
@@ -46,7 +46,7 @@
     }
    ],
    "firms": {
-    "diperbarui": "2026-11-03T02:12:26+00:00",
+    "diperbarui": "2026-11-03T03:42:32+00:00",
     "sejak": "2026-10-30",
     "titik_baru": 0
    },
