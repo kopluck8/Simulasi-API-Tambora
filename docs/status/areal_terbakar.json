@@ -67,6 +67,8 @@
  ],
  "peringatan": [],
  "persen_kawasan": 30.87,
- "sidik": "11227fdbb9bfee4d",
- "diperbarui": "2026-10-31T10:25:21+00:00"
+ "sidik": "ff83e1d5979c2260",
+ "diperbarui": "2026-11-03T00:11:56+00:00",
+ "bidang": 131,
+ "bidang_file": "docs/data/areal_terbakar_bidang.geojson"
 }
