@@ -2,71 +2,53 @@
  "mode": "dasar",
  "metode": "dnbr-median-bergulir-v5",
  "hotspot": true,
- "piksel_cerah_persen": 23.1,
+ "piksel_cerah_persen": 73.7,
  "koreksi_musiman_dnbr": {
-  "rumput": -0.0052,
-  "hutan/semak": -0.0119
+  "rumput": 0.0118,
+  "hutan/semak": 0.0032
  },
  "kandidat_baru_ha": 0.0,
  "kandidat_gugur_ha": 0.0,
  "kandidat_menunggu_ha": 0.0,
- "tanpa_hotspot_diabaikan_ha": 74.8,
- "bekas_terbakar_baru_ha": 246.5,
- "bekas_terbakar_musim_ha": 25004.5,
+ "tanpa_hotspot_diabaikan_ha": 364.4,
+ "bekas_terbakar_baru_ha": 1482.0,
+ "bekas_terbakar_musim_ha": 26486.5,
  "baru_per_kelompok_ha": {
-  "rumput": 197.6,
-  "hutan/semak": 47.3
+  "rumput": 1158.8,
+  "hutan/semak": 568.2
  },
  "baru_elevasi_persentil_m": [
-  105,
-  1445,
-  2229
+  61,
+  305,
+  2175
  ],
  "luas_fuel_ha": {
-  "30": 2205.5,
-  "31": 22009.1,
-  "32": 19744.1,
-  "33": 6253.8,
+  "30": 2191.3,
+  "31": 21587.4,
+  "32": 19324.0,
+  "33": 6148.6,
   "91": 192.3,
   "93": 4009.4,
   "98": 32878.9,
-  "99": 26530.0,
+  "99": 28012.0,
   "142": 0.3,
-  "161": 20654.9,
-  "186": 47921.7
+  "161": 20309.8,
+  "186": 47746.0
  },
- "baru_sejak": "2026-10-25",
- "tanggal": "2026-10-30",
+ "baru_sejak": "2026-10-30",
+ "tanggal": "2026-11-04",
  "citra": [
-  "S2B_MSIL2A_20261005T020649_R103_T50MPS_20261005T054436",
-  "S2B_MSIL2A_20261005T020649_R103_T50MNS_20261005T054436",
-  "S2B_MSIL2A_20261005T020649_R103_T50LPR_20261005T054436",
-  "S2B_MSIL2A_20261005T020649_R103_T50LNR_20261005T054436",
-  "S2C_MSIL2A_20261010T020651_R103_T50MPS_20261010T060402",
-  "S2C_MSIL2A_20261010T020651_R103_T50MNS_20261010T060402",
-  "S2C_MSIL2A_20261010T020651_R103_T50LPR_20261010T060402",
-  "S2C_MSIL2A_20261010T020651_R103_T50LNR_20261010T060402",
-  "S2B_MSIL2A_20261015T020649_R103_T50MPS_20261015T051024",
-  "S2B_MSIL2A_20261015T020649_R103_T50MNS_20261015T051024",
-  "S2B_MSIL2A_20261015T020649_R103_T50LPR_20261015T051024",
-  "S2B_MSIL2A_20261015T020649_R103_T50LNR_20261015T051024",
-  "S2C_MSIL2A_20261020T020711_R103_T50MPS_20261020T061005",
-  "S2C_MSIL2A_20261020T020711_R103_T50MNS_20261020T061005",
-  "S2C_MSIL2A_20261020T020711_R103_T50LPR_20261020T061005",
-  "S2C_MSIL2A_20261020T020711_R103_T50LNR_20261020T061005",
-  "S2A_MSIL2A_20261022T022331_R103_T50MNS_20261022T065614",
-  "S2A_MSIL2A_20261022T022331_R103_T50LPR_20261022T065614",
-  "S2A_MSIL2A_20261022T022331_R103_T50LNR_20261022T065614",
-  "S2B_MSIL2A_20261025T020749_R103_T50MPS_20261025T051040",
-  "S2B_MSIL2A_20261025T020749_R103_T50MNS_20261025T051040",
-  "S2B_MSIL2A_20261025T020749_R103_T50LPR_20261025T051040",
   "S2C_MSIL2A_20261030T020811_R103_T50MPS_20261030T060807",
   "S2C_MSIL2A_20261030T020811_R103_T50MNS_20261030T060807",
   "S2C_MSIL2A_20261030T020811_R103_T50LPR_20261030T060807",
-  "S2C_MSIL2A_20261030T020811_R103_T50LNR_20261030T060807"
+  "S2C_MSIL2A_20261030T020811_R103_T50LNR_20261030T060807",
+  "S2B_MSIL2A_20261104T020849_R103_T50MPS_20261104T050929",
+  "S2B_MSIL2A_20261104T020849_R103_T50MNS_20261104T050929",
+  "S2B_MSIL2A_20261104T020849_R103_T50LPR_20261104T050929",
+  "S2B_MSIL2A_20261104T020849_R103_T50LNR_20261104T050929"
  ],
  "awal_musim": "2026-06-01",
- "lcp": "tambora_20261030_10m.lcp",
+ "lcp": "tambora_20261104_10m.lcp",
  "jendela": [
   {
    "jendela": "2026-06-01/2026-06-22",
@@ -160,23 +142,23 @@
    "validasi_9sep_persen": 85.2
   },
   {
-   "jendela": "2026-10-26/2026-10-30",
-   "citra": 4,
-   "baru_ha": 244.9,
+   "jendela": "2026-10-26/2026-11-04",
+   "citra": 8,
+   "baru_ha": 1726.9,
    "koreksi": {
-    "rumput": -0.0052,
-    "hutan/semak": -0.0119
+    "rumput": 0.0118,
+    "hutan/semak": 0.0032
    },
    "kandidat_baru_ha": 0.0,
    "kandidat_gugur_ha": 0.0,
-   "tanpa_hotspot_diabaikan_ha": 74.8,
+   "tanpa_hotspot_diabaikan_ha": 364.4,
    "validasi_9sep_persen": 85.2
   }
  ],
  "skema": "jendela-tetap",
  "status_jendela": "2026-10-26",
  "jadwal": "tiap ada citra Sentinel-2 baru (dicek 2x sehari)",
- "citra_terakhir": "2026-10-30T02:08:11.025000Z",
+ "citra_terakhir": "2026-11-04T02:08:49.024000Z",
  "kawasan": {
   "resort": [
    {
@@ -191,11 +173,11 @@
     },
     "sisa": {
      "30": 207.1,
-     "31": 5140.6,
-     "32": 5300.0,
-     "33": 680.7
+     "31": 5069.8,
+     "32": 5227.7,
+     "33": 676.7
     },
-    "terbakar_musim_ha": 5869.5
+    "terbakar_musim_ha": 6045.0
    },
    {
     "nama": "Resort Oi Katupa",
@@ -208,12 +190,12 @@
      "33": 794.4
     },
     "sisa": {
-     "30": 200.4,
-     "31": 2404.3,
-     "32": 1599.3,
-     "33": 527.0
+     "30": 200.2,
+     "31": 2308.9,
+     "32": 1536.5,
+     "33": 514.4
     },
-    "terbakar_musim_ha": 2140.2
+    "terbakar_musim_ha": 2335.3
    },
    {
     "nama": "Resort Kawinda Toi",
@@ -227,11 +209,11 @@
     },
     "sisa": {
      "30": 303.4,
-     "31": 950.3,
-     "32": 644.0,
+     "31": 950.5,
+     "32": 644.1,
      "33": 257.8
     },
-    "terbakar_musim_ha": 2408.9
+    "terbakar_musim_ha": 2409.6
    },
    {
     "nama": "Resort Doro Ncanga",
@@ -245,11 +227,11 @@
     },
     "sisa": {
      "30": 272.6,
-     "31": 2792.4,
-     "32": 4502.6,
+     "31": 2792.2,
+     "32": 4502.5,
      "33": 1522.4
     },
-    "terbakar_musim_ha": 3832.0
+    "terbakar_musim_ha": 3834.8
    },
    {
     "nama": "Resort Doropeti",
@@ -262,12 +244,12 @@
      "33": 957.0
     },
     "sisa": {
-     "30": 163.1,
-     "31": 845.9,
-     "32": 737.6,
-     "33": 924.2
+     "30": 156.8,
+     "31": 792.4,
+     "32": 706.6,
+     "33": 919.1
     },
-    "terbakar_musim_ha": 467.5
+    "terbakar_musim_ha": 565.3
    },
    {
     "nama": "Resort Pancasila",
@@ -280,12 +262,12 @@
      "33": 462.6
     },
     "sisa": {
-     "30": 173.2,
-     "31": 410.8,
-     "32": 196.8,
-     "33": 313.1
+     "30": 172.9,
+     "31": 397.6,
+     "32": 182.0,
+     "33": 289.1
     },
-    "terbakar_musim_ha": 623.5
+    "terbakar_musim_ha": 717.8
    }
   ],
   "total": {
@@ -297,12 +279,12 @@
     "33": 5284.6
    },
    "sisa": {
-    "30": 1319.8,
-    "31": 12544.3,
-    "32": 12980.3,
-    "33": 4225.2
+    "30": 1313.0,
+    "31": 12311.4,
+    "32": 12799.4,
+    "33": 4179.5
    },
-   "terbakar_musim_ha": 15341.6
+   "terbakar_musim_ha": 15907.8
   }
  }
 }
