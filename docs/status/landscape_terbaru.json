@@ -2,41 +2,41 @@
  "mode": "dasar",
  "metode": "dnbr-median-bergulir-v5",
  "hotspot": true,
- "piksel_cerah_persen": 73.7,
+ "piksel_cerah_persen": 82.3,
  "koreksi_musiman_dnbr": {
-  "rumput": 0.0118,
-  "hutan/semak": 0.0032
+  "rumput": 0.0103,
+  "hutan/semak": 0.0007
  },
  "kandidat_baru_ha": 0.0,
  "kandidat_gugur_ha": 0.0,
  "kandidat_menunggu_ha": 0.0,
- "tanpa_hotspot_diabaikan_ha": 364.4,
- "bekas_terbakar_baru_ha": 1482.0,
- "bekas_terbakar_musim_ha": 26486.5,
+ "tanpa_hotspot_diabaikan_ha": 493.5,
+ "bekas_terbakar_baru_ha": 465.5,
+ "bekas_terbakar_musim_ha": 26952.0,
  "baru_per_kelompok_ha": {
-  "rumput": 1158.8,
-  "hutan/semak": 568.2
+  "rumput": 1527.1,
+  "hutan/semak": 665.3
  },
  "baru_elevasi_persentil_m": [
   61,
-  305,
-  2175
+  324,
+  2187
  ],
  "luas_fuel_ha": {
-  "30": 2191.3,
-  "31": 21587.4,
-  "32": 19324.0,
-  "33": 6148.6,
+  "30": 2183.2,
+  "31": 21384.8,
+  "32": 19201.8,
+  "33": 6113.1,
   "91": 192.3,
   "93": 4009.4,
   "98": 32878.9,
-  "99": 28012.0,
+  "99": 28477.5,
   "142": 0.3,
-  "161": 20309.8,
-  "186": 47746.0
+  "161": 20243.6,
+  "186": 47715.0
  },
- "baru_sejak": "2026-10-30",
- "tanggal": "2026-11-04",
+ "baru_sejak": "2026-11-04",
+ "tanggal": "2026-11-09",
  "citra": [
   "S2C_MSIL2A_20261030T020811_R103_T50MPS_20261030T060807",
   "S2C_MSIL2A_20261030T020811_R103_T50MNS_20261030T060807",
@@ -45,10 +45,14 @@
   "S2B_MSIL2A_20261104T020849_R103_T50MPS_20261104T050929",
   "S2B_MSIL2A_20261104T020849_R103_T50MNS_20261104T050929",
   "S2B_MSIL2A_20261104T020849_R103_T50LPR_20261104T050929",
-  "S2B_MSIL2A_20261104T020849_R103_T50LNR_20261104T050929"
+  "S2B_MSIL2A_20261104T020849_R103_T50LNR_20261104T050929",
+  "S2C_MSIL2A_20261109T022321_R103_T50MPS_20261109T060907",
+  "S2C_MSIL2A_20261109T022321_R103_T50MNS_20261109T060907",
+  "S2C_MSIL2A_20261109T022321_R103_T50LPR_20261109T060907",
+  "S2C_MSIL2A_20261109T022321_R103_T50LNR_20261109T060907"
  ],
  "awal_musim": "2026-06-01",
- "lcp": "tambora_20261104_10m.lcp",
+ "lcp": "tambora_20261109_10m.lcp",
  "jendela": [
   {
    "jendela": "2026-06-01/2026-06-22",
@@ -142,23 +146,23 @@
    "validasi_9sep_persen": 85.2
   },
   {
-   "jendela": "2026-10-26/2026-11-04",
-   "citra": 8,
-   "baru_ha": 1726.9,
+   "jendela": "2026-10-26/2026-11-09",
+   "citra": 12,
+   "baru_ha": 2192.4,
    "koreksi": {
-    "rumput": 0.0118,
-    "hutan/semak": 0.0032
+    "rumput": 0.0103,
+    "hutan/semak": 0.0007
    },
    "kandidat_baru_ha": 0.0,
    "kandidat_gugur_ha": 0.0,
-   "tanpa_hotspot_diabaikan_ha": 364.4,
+   "tanpa_hotspot_diabaikan_ha": 493.5,
    "validasi_9sep_persen": 85.2
   }
  ],
  "skema": "jendela-tetap",
  "status_jendela": "2026-10-26",
  "jadwal": "tiap ada citra Sentinel-2 baru (dicek 2x sehari)",
- "citra_terakhir": "2026-11-04T02:08:49.024000Z",
+ "citra_terakhir": "2026-11-09T02:23:21.024000Z",
  "kawasan": {
   "resort": [
    {
@@ -173,11 +177,11 @@
     },
     "sisa": {
      "30": 207.1,
-     "31": 5069.8,
-     "32": 5227.7,
-     "33": 676.7
+     "31": 5055.3,
+     "32": 5232.2,
+     "33": 676.4
     },
-    "terbakar_musim_ha": 6045.0
+    "terbakar_musim_ha": 6053.7
    },
    {
     "nama": "Resort Oi Katupa",
@@ -191,11 +195,11 @@
     },
     "sisa": {
      "30": 200.2,
-     "31": 2308.9,
-     "32": 1536.5,
-     "33": 514.4
+     "31": 2255.2,
+     "32": 1496.2,
+     "33": 507.7
     },
-    "terbakar_musim_ha": 2335.3
+    "terbakar_musim_ha": 2445.7
    },
    {
     "nama": "Resort Kawinda Toi",
@@ -209,11 +213,11 @@
     },
     "sisa": {
      "30": 303.4,
-     "31": 950.5,
-     "32": 644.1,
-     "33": 257.8
+     "31": 950.1,
+     "32": 642.2,
+     "33": 257.4
     },
-    "terbakar_musim_ha": 2409.6
+    "terbakar_musim_ha": 2412.2
    },
    {
     "nama": "Resort Doro Ncanga",
@@ -226,12 +230,12 @@
      "33": 1916.7
     },
     "sisa": {
-     "30": 272.6,
-     "31": 2792.2,
-     "32": 4502.5,
+     "30": 272.5,
+     "31": 2791.8,
+     "32": 4502.2,
      "33": 1522.4
     },
-    "terbakar_musim_ha": 3834.8
+    "terbakar_musim_ha": 3835.4
    },
    {
     "nama": "Resort Doropeti",
@@ -244,12 +248,12 @@
      "33": 957.0
     },
     "sisa": {
-     "30": 156.8,
-     "31": 792.4,
-     "32": 706.6,
-     "33": 919.1
+     "30": 151.9,
+     "31": 751.2,
+     "32": 698.2,
+     "33": 915.5
     },
-    "terbakar_musim_ha": 565.3
+    "terbakar_musim_ha": 626.5
    },
    {
     "nama": "Resort Pancasila",
@@ -262,12 +266,12 @@
      "33": 462.6
     },
     "sisa": {
-     "30": 172.9,
-     "31": 397.6,
-     "32": 182.0,
-     "33": 289.1
+     "30": 172.6,
+     "31": 389.8,
+     "32": 176.5,
+     "33": 286.9
     },
-    "terbakar_musim_ha": 717.8
+    "terbakar_musim_ha": 737.3
    }
   ],
   "total": {
@@ -279,12 +283,12 @@
     "33": 5284.6
    },
    "sisa": {
-    "30": 1313.0,
-    "31": 12311.4,
-    "32": 12799.4,
-    "33": 4179.5
+    "30": 1307.7,
+    "31": 12193.4,
+    "32": 12747.5,
+    "33": 4166.3
    },
-   "terbakar_musim_ha": 15907.8
+   "terbakar_musim_ha": 16110.8
   }
  }
 }
