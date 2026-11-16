@@ -1,6 +1,6 @@
 RAWS_ELEVATION: 383
 RAWS_UNITS: Metric
-RAWS: 133
+RAWS: 134
 Year  Mth  Day  Time  Temp   RH  HrlyPcp  WindSpd  WindDir  CloudCov
 2026   10   30  0700    28   66     0.00       11      122        10
 2026   10   30  0800    30   58     0.00        9      116         7
@@ -135,3 +135,4 @@ Year  Mth  Day  Time  Temp   RH  HrlyPcp  WindSpd  WindDir  CloudCov
 2026   11    4  1700    29   66     0.00       10       84       100
 2026   11    4  1800    27   72     0.00        9      103       100
 2026   11    4  1900    27   70     0.00       10      140       100
+2026   11    4  2000    27   72     0.00        9      141        97
